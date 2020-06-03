@@ -2,6 +2,8 @@
  Smart Product Project 3- Beach House
  by Olga Saadi and Jenny Wang
  5/31/2020
+
+ hello world
  
  */
 #include "config.h"  // wifi credentials & API info go here
