@@ -32,6 +32,10 @@
 #include <KT403A_Player.h>
 #include "wiring_private.h"
 
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+  #include <avr/power.h>
+#endif
 
 //---------------------------------
 //         OLED Variables     
@@ -52,10 +56,13 @@ String weather;
 //      Defintions & Variables     
 //---------------------------------
 
-#define BUTTON1PIN 2  //BUTTON0 is used for toggling
-#define BUTTON2PIN 4  //BUTTON1 is used for confirmation
-#define BUTTON3PIN 6  //BUTTON2 is used for rejection/cancellation
+#define BUTTON1PIN 2  //BUTTON0 is used for banana bread Message
+#define BUTTON2PIN 3 // Button for KG message
+#define BUTTON3PIN 4  //BUTTON1 is used for confirmation
+#define BUTTON4PIN 6  //BUTTON2 is used for rejection/cancellation
 #define V30
+#define LED // CHOOSE PIN
+#define NUMPIXELS      11  // Number of LEDs on strip
 
 #define ShowSerial SerialUSB // the serial port used for displaying info and reading user input
 #define COMSerial mySerial // the serial port used for UART communication with the mp3 player
@@ -76,22 +83,28 @@ void SERCOM0_Handler()
 String inputCommand; // string for holding input commands
 
 
+/////////////////////////////////// Declare our NeoPixel strip object:
+
+Adafruit_NeoPixel strip(NUMPIXELS, LED, NEO_GRB + NEO_KHZ800);
+int delayval = 500; // delay for half a second
+
+ 
 //---------------------------------
 //     Event & State Variables     
 //---------------------------------
 
 // Renaming events to have more useful names
 // (you can add more and rename as needed)
-#define EVENTBUTTON1DOWN EventManager::kEventUser0
-#define EVENTBUTTON2DOWN EventManager::kEventUser1
-#define EVENTBUTTON3DOWN EventManager::kEventUser2
-
+#define EVENTBUTTON1DOWN EventManager::kEventUser0 // send message 1
+#define EVENTBUTTON2DOWN EventManager::kEventUser1 // send message 2
+#define EVENTBUTTON3DOWN EventManager::kEventUser2 // event accepted
+#define EVENTBUTTON4DOWN EventManager::kEventUser3 // event denied
 
 // Create the Event Manager
 EventManager eventManager;
 
 // Create the different states for the state machine
-enum SystemState_t {INIT, OFF, SELECT_MESSAGE, WAIT_RESPONSE, RECEIVE_RESPONSE, RECEIVE_MESSAGE};
+enum SystemState_t {INIT, OFF, WAIT_RESPONSE, REACT_RESPONSE};
 
 // Create and set a variable to store the current state
 SystemState_t currentState = INIT;
@@ -141,7 +154,7 @@ void setup() {
   digitalWrite(LED_BUILTIN, LOW); // turn off light once connected
 
   
-  ////////////////////  try to communicate with seria
+  ////////////////////  try to communicate with serial
   if (!tempsensor.begin(I2C_ADDRESS)) {
     Serial.println("Couldn't find MCP9808! Check your connections and verify the address is correct.");
     while (1);
@@ -161,10 +174,13 @@ void setup() {
   u8g2.setFont(u8g2_font_6x10_tf);
 
 
+
   // Attach event checkers to the state machine
   eventManager.addListener(EVENTBUTTON0DOWN, BEACH_HOUSE_SM);
   eventManager.addListener(EVENTBUTTON1DOWN, BEACH_HOUSE_SM);
   eventManager.addListener(EVENTBUTTON2DOWN, BEACH_HOUSE_SM);
+  eventManager.addListener(EVENTBUTTON3DOWN, BEACH_HOUSE_SM);
+  eventManager.addListener(EVENT_RESPONSE, BEACH_HOUSE_SM);
   
     // Initialize state machine
   BEACH_HOUSE_SM(INIT,0);
@@ -187,6 +203,8 @@ void loop() {
   OnBUTTON0DOWN();
   OnBUTTON1DOWN();
   OnBUTTON2DOWN();
+  OnBUTTON3DOWN();
+  CHECK_EVENT_RESPONSE();
 
 }
 
@@ -230,20 +248,34 @@ void OnBUTTON1DOWN() {
 }
 
 
-void OnBUTTON2DOWN() {
-
-  static int lastButtonReading = LOW;
-  int thisButtonReading = digitalRead(BUTTONPIN2);
-
-  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
-  //      If it did, update eventHappened flag (and parameter, if desired)
-  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
-    eventManager.queueEvent(EVENTBUTTON2DOWN, 0); 
-    delay(100);
-  }
-  lastButtonReading = thisButtonReading;
+//void OnBUTTON2DOWN() {
+//
+//  static int lastButtonReading = LOW;
+//  int thisButtonReading = digitalRead(BUTTONPIN2);
+//
+//  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
+//  //      If it did, update eventHappened flag (and parameter, if desired)
+//  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
+//    eventManager.queueEvent(EVENTBUTTON2DOWN, 0); 
+//    delay(100);
+//  }
+//  lastButtonReading = thisButtonReading;
+//}
+//
+//
+//void OnBUTTON3DOWN() {
+//
+//  static int lastButtonReading = LOW;
+//  int thisButtonReading = digitalRead(BUTTONPIN3);
+//
+//  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
+//  //      If it did, update eventHappened flag (and parameter, if desired)
+//  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
+//    eventManager.queueEvent(EVENTBUTTON3DOWN, 0); 
+//    delay(100);
+//  }
+//  lastButtonReading = thisButtonReading;
 }
-
 
 void OnTIMER() {
   
@@ -258,6 +290,13 @@ void OnTIMER() {
   }
 }
 
+void CHECK_EVENT_RESPONSE()
+{
+    // RETURN WHAT THE RESPONSE IS. 
+}
+
+
+
 //---------------------------------
 //           State Machine  
 //---------------------------------
@@ -271,283 +310,153 @@ void BEACH_HOUSE_SM( int event, int param )
   // Initialize next state
   SystemState_t nextState = currentState;
 
-  // Handle events based on the current state
+
+ // Handle events based on the current state
   switch (currentState) {
     case INIT:
       Serial.println("STATE: Initialization");
       pinMode(BUTTONPIN, INPUT);
-      
-      // Transition to a different state
-      Serial.println("    Transitioning to State: MODE1");
-      readSensor();
-      printSensor();
-      GetData();
-      nextState = MODE1;
-      break;
+
+      /////////////////////////  Set up the LED Strip
+       strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
+       strip.show();            // Turn OFF all pixels ASAP
+       strip.setBrightness(250); // Set BRIGHTNESS 
+
+
+      // LEDs shine white to show initialization
+     LED_ON(250,250,250);
+     LEF_OFF;
+     
+    delay (5000);
+
+
+  
+// PRINT IN LED SCREEN "READY"   
+          Serial.println("System Ready");
+          u8g2.clearBuffer();
+          u8g2.setFont(u8g2_font_VCR_OSD_tf);
+          u8g2.drawStr(20, 16, "System Ready");
+          u8g2.setFont(u8g2_font_7x13_tf);
+          u8g2.sendBuffer();
+
+       // Transition to a different state
+       nextstate = OFF;
+       
+          break;
 
     case OFF:
+
+    strip.clear();
+    u8g2.clearBuffer();
+
+         if (event == EVENTBUTTON0DOWN)
+         {
+          // SEND MESSAGE 1 TO OTHER HOUSE
+         
+         LED_ON(250,250,250);
+         nextstate=WAIT_RESPONSE;
+         }
+         
+         if (event == EVENTBUTTON1DOWN)
+         {
+         // SEND MESSAGE 2 TO OTHER HOUSE
+    
+         LED_ON(250,250,250);
+         nextstate=WAIT_RESPONSE;
+        
+         }
+
+
+    break;
+    
+    case WAIT_RESPONSE:
       Serial.println("STATE: MODE1");
       
-      if(event == EVENTTIMER1){
-        Serial.println("Shutdown MCP9808.... ");
-        tempsensor.shutdown_wake(1); // shutdown MSP9808 - power consumption ~0.1 mikro Ampere, stops temperature sampling
-        Serial.println("");
-           
-        readSensor();
-        printSensor();
-        if ((roomTemp > higherLimit) || (roomTemp < lowerLimit)){
-          Serial.println("ALERT!!");
+      //RESPONSE CHECKER FUNCTION, STAY IN THIS STATE UNTIL RESPONSE IS IDENTIFIED
+      
+      if(event == EVENT_RESPONSE){
+        Serial.println("Response being received");
+        
+        if (//RESPONSE IS POSITIVE)
+          {
+
+          LED_ON(0,250,0);
+          Serial.println("YAS");
           u8g2.clearBuffer();
           u8g2.setFont(u8g2_font_VCR_OSD_tf);
-          u8g2.drawStr(20, 16, "ALERT!");
+          u8g2.drawStr(20, 16, "YAS");
           u8g2.setFont(u8g2_font_7x13_tf);
           u8g2.sendBuffer();
-          nextState = ALERT;
+
+          nextState = REACT_RESPONSE;
           } 
+
+          else
+          {
+            LED_ON(250,0,0);
+            Serial.println("No Thanks");
+            u8g2.clearBuffer();
+            u8g2.setFont(u8g2_font_VCR_OSD_tf);
+            u8g2.drawStr(20, 16, "No Thanks");
+            u8g2.setFont(u8g2_font_7x13_tf);
+            u8g2.sendBuffer();
+            
+            nextState = REACT_RESPONSE;
+          }
+         
       }
-
-      else if (event == EVENTTIMER2){
-        GetData();
-        }
-        
-      else if(event == EVENTBUTTONDOWN){ 
-        Serial.println("    Transitioning to State: MODE2");
-        nextState = MODE2;
-        Serial.println(roomTemp);
-        Serial.println(averageTemp);
-        Serial.println(minTemp);
-        Serial.println(maxTemp);
-        u8g2.clearBuffer();
-        drawFloat(5, 40, roomTemp);
-        drawFloat(41, 40, averageTemp);
-        drawFloat(71, 40, minTemp);
-        drawFloat(101, 40, maxTemp);
-        u8g2.drawStr(5, 20, "Room");
-        u8g2.drawStr(41, 20, "Avg");
-        u8g2.drawStr(71, 20, "Min");
-        u8g2.drawStr(101, 20, "Max");
-        u8g2.sendBuffer();
-      } 
       
       break; 
-      
-    case MODE2:
-      Serial.println("STATE: MODE2");
-      
-      if(event == EVENTTIMER1){
-        Serial.println("Shutdown MCP9808.... ");
-        tempsensor.shutdown_wake(1); // shutdown MSP9808 - power consumption ~0.1 mikro Ampere, stops temperature sampling
-        Serial.println("");
-        nextState = MODE2;
-        readSensor();
-        Serial.println(roomTemp);
-        Serial.println(averageTemp);
-        Serial.println(minTemp);
-        Serial.println(maxTemp);
-        u8g2.clearBuffer();
-        drawFloat(5, 40, roomTemp);
-        drawFloat(41, 40, averageTemp);
-        drawFloat(71, 40, minTemp);
-        drawFloat(101, 40, maxTemp);
-        u8g2.drawStr(5, 20, "Room");
-        u8g2.drawStr(41, 20, "Avg");
-        u8g2.drawStr(71, 20, "Min");
-        u8g2.drawStr(101, 20, "Max");
-        u8g2.sendBuffer();
-        
-        if ((roomTemp > higherLimit) || (roomTemp < lowerLimit)){
-          Serial.println("ALERT!!");
-          u8g2.clearBuffer();
-          u8g2.setFont(u8g2_font_VCR_OSD_tf);
-          u8g2.drawStr(20, 16, "ALERT!");
-          u8g2.drawStr(20, 41, "So Hot!");
-          u8g2.setFont(u8g2_font_7x13_tf);
-          u8g2.sendBuffer();
-          nextState = ALERT;
-          } 
-        } 
-      
-      else if (event == EVENTTIMER2){
-        GetData();
-        }
-        
-      else if(event == EVENTBUTTONDOWN){ 
-        Serial.println("    Transitioning to State: MODE3");
-        nextState = MODE3;
-        Serial.println(current_text);
-        Serial.println(current_icon);
-        Serial.println(current_temp);
-        u8g2.clearBuffer();
-        drawString(5, 30,current_text);        
-        drawIcon(50, 25, current_text);
-        drawFloat(92, 30, current_temp);
-        u8g2.sendBuffer();
-        
-        }  
-      break; 
 
-    case MODE3:
-      Serial.println("STATE: MODE3");
-      
-      if(event == EVENTTIMER2){
-        GetData();
-        u8g2.clearBuffer();
-        drawString(5, 30,current_text);        
-        drawIcon(50, 25, current_text);
-        drawFloat(92, 30, current_temp);
-        u8g2.sendBuffer();
-        } 
-       
-      else if (event == EVENTTIMER1){
-        readSensor();
-        if ((roomTemp > higherLimit) || (roomTemp < lowerLimit)){
-          Serial.println("ALERT!!");
-          u8g2.clearBuffer();
-          u8g2.setFont(u8g2_font_VCR_OSD_tf);
-          u8g2.drawStr(20, 16, "ALERT!");
-          u8g2.drawStr(20, 41, "So Hot!");
-          u8g2.setFont(u8g2_font_7x13_tf);
-          u8g2.sendBuffer();
-          nextState = ALERT;
-          } 
-        }
-        
-      else if(event == EVENTBUTTONDOWN){ 
-        Serial.println("    Transitioning to State: MODE4");
-        nextState = MODE4;
-        Serial.print(day1_date);
-        Serial.print(day1_text);
-        Serial.print(day1_icon);
-        Serial.print(day2_date);
-        Serial.print(day2_text);
-        Serial.print(day2_icon);
-        Serial.print(day3_date);
-        Serial.print(day3_text);
-        Serial.print(day3_icon);
-        u8g2.clearBuffer();
-        drawString(5,5,day1_date);
-        drawString(52,5,day2_date);
-        drawString(92,5,day3_date);
-        drawString(5,22,day1_text);
-        drawString(52,22,day2_text);
-        drawString(92,22,day3_text);
-        drawIcon(5, 38, day1_text);
-        drawIcon(52, 40, day2_text);
-        drawIcon(92, 40, day3_text);
-        u8g2.sendBuffer();
-        
-        }  
-      break; 
+     case REACT_RESPONSE:
+     static int startTime = millis();
 
-    case MODE4:
-      Serial.println("STATE: MODE4");
+     if (event==EVENTBUTTON3DOWN)
+     {
+      LED_OFF;
+     }
 
-      if(event == EVENTTIMER2){
-        GetData();
-        Serial.print(day1_date);
-        Serial.print(day1_text);
-        Serial.print(day1_icon);
-        Serial.print(day2_date);
-        Serial.print(day2_text);
-        Serial.print(day2_icon);
-        Serial.print(day3_date);
-        Serial.print(day3_text);
-        Serial.print(day3_icon);
-        u8g2.clearBuffer();
-        drawString(5,5,day1_date);
-        drawString(52,5,day2_date);
-        drawString(92,5,day3_date);
-        drawString(5,22,day1_text);
-        drawString(52,22,day2_text);
-        drawString(92,22,day3_text);
-        drawIcon(5, 38, day1_text);
-        drawIcon(52, 40, day2_text);
-        drawIcon(92, 40, day3_text);
-        u8g2.sendBuffer();
-        
-        } 
-
-      else if (event == EVENTTIMER1){
-      readSensor();
-      if ((roomTemp > higherLimit) || (roomTemp < lowerLimit)){
-        Serial.println("ALERT!!");
-        u8g2.clearBuffer();
-        u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "ALERT!");
-        u8g2.drawStr(20, 41, "So Hot!");
-        u8g2.setFont(u8g2_font_7x13_tf);
-        u8g2.sendBuffer();
-        nextState = ALERT;
-        } 
-      }
-      else if(event == EVENTBUTTONDOWN){ 
-        Serial.println("    Transitioning to State: MODE1");
-        nextState = MODE1;
-        printSensor();
-        }  
-        
-      break; 
+    if(startTime<dismiss)
+    {
+      LED_OFF;
+    }
       
-    case ALERT:
-      Serial.println("STATE: ALERT");
-      if(event == EVENTBUTTONDOWN) { 
-        nextState = MODE1;
-        printSensor();
-      } 
-      else if (event == EVENTTIMER1) {
-        readSensor();
-      }
-      break;
+   break;
       
-    default:
-      Serial.println("STATE: Unknown State");
-      break;
   }
-
+    
   // Update the current state
   currentState = nextState;
-}
+  
+  }
 
 
 //---------------------------------
 //        Helper Functions     
 //---------------------------------
 
-
-void readSensor(){
-  static int sumTemp = 0;
-  static int count = 0;
-  
-  tempsensor.wake();   // wake up, ready to read!
-
-  // Read and print out the temperature, also shows the resolution mode used for reading.
-  roomTemp = round(tempsensor.readTempC());
-
-  sumTemp = sumTemp + roomTemp;
-  count ++;
-  
-  averageTemp = sumTemp / count;
-  if (roomTemp < minTemp) {
-    minTemp = roomTemp;
-  }
-    
-  if(roomTemp > maxTemp) {
-    maxTemp = roomTemp;
-  }
- 
+void LED_ON (int x, int y, int z)
+{   
+  for(int i=0;i<NUMPIXELS;i++)
+      {
+       strip.setPixelColor(i, x, y, z);
+       strip.show();
+       Serial.println(i);
+       delay(100); // Delay for a period of time (in milliseconds)
+      }
 }
 
-void printSensor(){
-  Serial.print("Temp: "); 
-  Serial.print(roomTemp); Serial.print("*C\t");
-  u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_VCR_OSD_tf);
-  drawFloat(45,40,roomTemp);  
-  u8g2.setFont(u8g2_font_7x13_tf);
-  u8g2.drawStr(10, 20, "Room Temperature");
-  u8g2.sendBuffer();
-  
+void LED_OFF()
+{
+  for(int i=0;i<NUMPIXELS;i++)
+      {
+       strip.setPixelColor(i, 0,0, 0);
+       strip.show();
+       Serial.println(i);
+       delay(100); // Delay for a period of time (in milliseconds)
+      }
 }
+  
 
 
 void GetData(){
@@ -605,29 +514,3 @@ void GetData(){
     Serial.println("[WIFI] Not connected");
   }  
 }   
-
-void drawFloat(int x, int y, int num) {
-  String str = String(num) + "C";
-  char text[str.length() + 1];
-  str.toCharArray(text, str.length() + 1);
-  u8g2.drawStr(x, y, text);
-  }
-
-void drawString(int x, int y, String words) {
-  char text[words.length() + 1];
-  words.toCharArray(text, words.length() + 1);
-  u8g2.drawStr(x, y, text);
-  }
-
-
-void drawIcon(int x, int y, String day_text) {
-  if (day_text == "Rain" ){
-  u8g2.drawXBMP(x, y, rain_width, rain_height, rain_bits);
-  }
-  else if (day_text == "Clouds" ){
-  u8g2.drawXBMP(x, y, few_clouds_day_width, few_clouds_day_height, few_clouds_day_bits);
-  }
-  else if (day_text == "Clear" ){
-  u8g2.drawXBMP(x, y, clear_day_width, clear_day_height, clear_day_bits);
-  }
-  }
