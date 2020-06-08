@@ -47,7 +47,8 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 // WiFi and HTTP objects
 WiFiSSLClient wifi;
-HttpClient GetClient = HttpClient(wifi, ad_host, ad_port);
+HttpClient GetClient = HttpClient(wifi, io_host, io_port);
+HttpClient PostClient = HttpClient(wifi, io_host, io_port);
 
 // Strings to GET and POST
 String weather;
@@ -57,12 +58,14 @@ String weather;
 //---------------------------------
 
 #define BUTTON1PIN 2  //BUTTON0 is used for banana bread Message
-#define BUTTON2PIN 3 // Button for KG message
-#define BUTTON3PIN 4  //BUTTON1 is used for confirmation
-#define BUTTON4PIN 6  //BUTTON2 is used for rejection/cancellation
+#define BUTTON2PIN 4 // Button for KG message
+#define BUTTON3PIN 6  //BUTTON1 is used for confirmation
+#define BUTTON4PIN A0  //BUTTON2 is used for rejection/cancellation
 #define V30
-#define LED // CHOOSE PIN
+#define LED A2 // CHOOSE PIN
 #define NUMPIXELS      11  // Number of LEDs on strip
+
+String currentValue;
 
 #define ShowSerial SerialUSB // the serial port used for displaying info and reading user input
 #define COMSerial mySerial // the serial port used for UART communication with the mp3 player
@@ -99,6 +102,7 @@ int delayval = 500; // delay for half a second
 #define EVENTBUTTON2DOWN EventManager::kEventUser1 // send message 2
 #define EVENTBUTTON3DOWN EventManager::kEventUser2 // event accepted
 #define EVENTBUTTON4DOWN EventManager::kEventUser3 // event denied
+#define EVENTTIMER EventManager::kEventUser4 // event timer
 
 // Create the Event Manager
 EventManager eventManager;
@@ -152,15 +156,6 @@ void setup() {
   }
   Serial.println("WiFi successfully connected");
   digitalWrite(LED_BUILTIN, LOW); // turn off light once connected
-
-  
-  ////////////////////  try to communicate with serial
-  if (!tempsensor.begin(I2C_ADDRESS)) {
-    Serial.println("Couldn't find MCP9808! Check your connections and verify the address is correct.");
-    while (1);
-  }  
-  Serial.println("Found MCP9808!");
-  tempsensor.setResolution(0); 
   
   ////////////////////  Set up the OLED
   u8g2.begin(); 
@@ -176,11 +171,11 @@ void setup() {
 
 
   // Attach event checkers to the state machine
-  eventManager.addListener(EVENTBUTTON0DOWN, BEACH_HOUSE_SM);
   eventManager.addListener(EVENTBUTTON1DOWN, BEACH_HOUSE_SM);
   eventManager.addListener(EVENTBUTTON2DOWN, BEACH_HOUSE_SM);
   eventManager.addListener(EVENTBUTTON3DOWN, BEACH_HOUSE_SM);
-  eventManager.addListener(EVENT_RESPONSE, BEACH_HOUSE_SM);
+  eventManager.addListener(EVENTBUTTON4DOWN, BEACH_HOUSE_SM);
+  eventManager.addListener(EVENTTIMER, BEACH_HOUSE_SM);
   
     // Initialize state machine
   BEACH_HOUSE_SM(INIT,0);
@@ -200,11 +195,11 @@ void loop() {
   //    Add all of your event checking functions here
   //    Rename and add more as needed
   
-  OnBUTTON0DOWN();
   OnBUTTON1DOWN();
   OnBUTTON2DOWN();
   OnBUTTON3DOWN();
-  CHECK_EVENT_RESPONSE();
+  OnBUTTON4DOWN();
+  OnTIMER();
 
 }
 
@@ -218,25 +213,10 @@ void loop() {
  *    Change function names as desired. */
 
 
-void OnBUTTON0DOWN() {
-
-  static int lastButtonReading = LOW;
-  int thisButtonReading = digitalRead(BUTTONPIN0);
-
-  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
-  //      If it did, update eventHappened flag (and parameter, if desired)
-  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
-    eventManager.queueEvent(EVENTBUTTON0DOWN, 0); 
-    delay(100);
-  }
-  lastButtonReading = thisButtonReading;
-}
-
-
 void OnBUTTON1DOWN() {
 
   static int lastButtonReading = LOW;
-  int thisButtonReading = digitalRead(BUTTONPIN1);
+  int thisButtonReading = digitalRead(BUTTON1PIN);
 
   // Check if this event happened (e.g., button is pressed, timer expired, etc.):
   //      If it did, update eventHappened flag (and parameter, if desired)
@@ -248,33 +228,47 @@ void OnBUTTON1DOWN() {
 }
 
 
-//void OnBUTTON2DOWN() {
-//
-//  static int lastButtonReading = LOW;
-//  int thisButtonReading = digitalRead(BUTTONPIN2);
-//
-//  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
-//  //      If it did, update eventHappened flag (and parameter, if desired)
-//  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
-//    eventManager.queueEvent(EVENTBUTTON2DOWN, 0); 
-//    delay(100);
-//  }
-//  lastButtonReading = thisButtonReading;
-//}
-//
-//
-//void OnBUTTON3DOWN() {
-//
-//  static int lastButtonReading = LOW;
-//  int thisButtonReading = digitalRead(BUTTONPIN3);
-//
-//  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
-//  //      If it did, update eventHappened flag (and parameter, if desired)
-//  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
-//    eventManager.queueEvent(EVENTBUTTON3DOWN, 0); 
-//    delay(100);
-//  }
-//  lastButtonReading = thisButtonReading;
+void OnBUTTON2DOWN() {
+
+  static int lastButtonReading = LOW;
+  int thisButtonReading = digitalRead(BUTTON2PIN);
+
+  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
+  //      If it did, update eventHappened flag (and parameter, if desired)
+  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
+    eventManager.queueEvent(EVENTBUTTON2DOWN, 0); 
+    delay(100);
+  }
+  lastButtonReading = thisButtonReading;
+}
+
+
+void OnBUTTON3DOWN() {
+
+  static int lastButtonReading = LOW;
+  int thisButtonReading = digitalRead(BUTTON3PIN);
+
+  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
+  //      If it did, update eventHappened flag (and parameter, if desired)
+  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
+    eventManager.queueEvent(EVENTBUTTON3DOWN, 0); 
+    delay(100);
+  }
+  lastButtonReading = thisButtonReading;
+}
+
+void OnBUTTON4DOWN() {
+
+  static int lastButtonReading = LOW;
+  int thisButtonReading = digitalRead(BUTTON4PIN);
+
+  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
+  //      If it did, update eventHappened flag (and parameter, if desired)
+  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
+    eventManager.queueEvent(EVENTBUTTON4DOWN, 0); 
+    delay(100);
+  }
+  lastButtonReading = thisButtonReading;
 }
 
 void OnTIMER() {
@@ -284,15 +278,10 @@ void OnTIMER() {
 
   // Check if this event happened (e.g., button is pressed, timer expired, etc.):
   //      If it did, update eventHappened flag (and parameter, if desired)
-  if (totaLength >= 5000) {
+  if (totaLength >= 1000) {
     startTime = millis();
-    eventManager.queueEvent(EVENTTIMER1, 0);
+    eventManager.queueEvent(EVENTTIMER, 0);
   }
-}
-
-void CHECK_EVENT_RESPONSE()
-{
-    // RETURN WHAT THE RESPONSE IS. 
 }
 
 
@@ -310,76 +299,63 @@ void BEACH_HOUSE_SM( int event, int param )
   // Initialize next state
   SystemState_t nextState = currentState;
 
-
  // Handle events based on the current state
   switch (currentState) {
     case INIT:
       Serial.println("STATE: Initialization");
-      pinMode(BUTTONPIN, INPUT);
+      pinMode(BUTTON1PIN, INPUT);
 
-      /////////////////////////  Set up the LED Strip
-       strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
-       strip.show();            // Turn OFF all pixels ASAP
-       strip.setBrightness(250); // Set BRIGHTNESS 
-
-
+      // Set up the LED Strip
+      strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
+      strip.show();            // Turn OFF all pixels ASAP
+      strip.setBrightness(250); // Set BRIGHTNESS 
+      
+      
       // LEDs shine white to show initialization
-     LED_ON(250,250,250);
-     LEF_OFF;
-     
-    delay (5000);
+      LED_ON(250,250,250);
+      LED_OFF;     
+      delay (3000);
+      
+      // PRINT IN LED SCREEN "READY"   
+      Serial.println("System Ready");
+      u8g2.clearBuffer();
+      u8g2.setFont(u8g2_font_VCR_OSD_tf);
+      u8g2.drawStr(20, 16, "System Ready");
+      u8g2.setFont(u8g2_font_7x13_tf);
+      u8g2.sendBuffer();
+      
+      // Transition to a different state
+      nextState = OFF; 
+      break;
 
-
-  
-// PRINT IN LED SCREEN "READY"   
-          Serial.println("System Ready");
-          u8g2.clearBuffer();
-          u8g2.setFont(u8g2_font_VCR_OSD_tf);
-          u8g2.drawStr(20, 16, "System Ready");
-          u8g2.setFont(u8g2_font_7x13_tf);
-          u8g2.sendBuffer();
-
-       // Transition to a different state
-       nextstate = OFF;
-       
-          break;
 
     case OFF:
+      strip.clear();
+      u8g2.clearBuffer();
+      
+      if (event == EVENTBUTTON1DOWN){
+      PostData("bananabraed");
+      LED_ON(250,250,250);
+      nextState=WAIT_RESPONSE;
+      }
+      
+      if (event == EVENTBUTTON2DOWN){
+      PostData("friday");
+      LED_ON(250,250,250);
+      nextState=WAIT_RESPONSE;    
+      }
 
-    strip.clear();
-    u8g2.clearBuffer();
-
-         if (event == EVENTBUTTON0DOWN)
-         {
-          // SEND MESSAGE 1 TO OTHER HOUSE
-         
-         LED_ON(250,250,250);
-         nextstate=WAIT_RESPONSE;
-         }
-         
-         if (event == EVENTBUTTON1DOWN)
-         {
-         // SEND MESSAGE 2 TO OTHER HOUSE
-    
-         LED_ON(250,250,250);
-         nextstate=WAIT_RESPONSE;
-        
-         }
-
-
-    break;
+      break;
     
     case WAIT_RESPONSE:
       Serial.println("STATE: MODE1");
       
-      //RESPONSE CHECKER FUNCTION, STAY IN THIS STATE UNTIL RESPONSE IS IDENTIFIED
-      
-      if(event == EVENT_RESPONSE){
+      //RESPONSE CHECKER FUNCTION, STAY IN THIS STATE UNTIL RESPONSE IS IDENTIFIED  
+      if(event == EVENTTIMER){
         Serial.println("Response being received");
+        GetData();
         
-        if (//RESPONSE IS POSITIVE)
-          {
-
+        if (currentValue == "accepted"){
           LED_ON(0,250,0);
           Serial.println("YAS");
           u8g2.clearBuffer();
@@ -387,42 +363,41 @@ void BEACH_HOUSE_SM( int event, int param )
           u8g2.drawStr(20, 16, "YAS");
           u8g2.setFont(u8g2_font_7x13_tf);
           u8g2.sendBuffer();
-
           nextState = REACT_RESPONSE;
           } 
 
-          else
-          {
-            LED_ON(250,0,0);
-            Serial.println("No Thanks");
-            u8g2.clearBuffer();
-            u8g2.setFont(u8g2_font_VCR_OSD_tf);
-            u8g2.drawStr(20, 16, "No Thanks");
-            u8g2.setFont(u8g2_font_7x13_tf);
-            u8g2.sendBuffer();
-            
-            nextState = REACT_RESPONSE;
-          }
-         
-      }
-      
+        else if (currentValue == "rejected"){        
+          LED_ON(250,0,0);
+          Serial.println("No Thanks");
+          u8g2.clearBuffer();
+          u8g2.setFont(u8g2_font_VCR_OSD_tf);
+          u8g2.drawStr(20, 16, "No Thanks");
+          u8g2.setFont(u8g2_font_7x13_tf);
+          u8g2.sendBuffer();
+          nextState = REACT_RESPONSE;
+        }   
+      } 
       break; 
 
-     case REACT_RESPONSE:
-     static int startTime = millis();
-
-     if (event==EVENTBUTTON3DOWN)
-     {
-      LED_OFF;
-     }
-
-    if(startTime<dismiss)
-    {
-      LED_OFF;
-    }
+    case REACT_RESPONSE:
+      static int startTime = millis();
       
-   break;
+      if (event==EVENTBUTTON4DOWN)
+      {
+      LED_OFF;
+      nextState = OFF;
+      }
       
+      else if(startTime > 120000)
+      {
+      LED_OFF;
+      nextState = OFF;
+      }      
+      break;
+
+    default:
+      Serial.println("STATE: Unknown State");
+      break;
   }
     
   // Update the current state
@@ -464,7 +439,7 @@ void GetData(){
   if (WiFi.status() == WL_CONNECTED) {
 
     // Create a GET request to the advice path
-    GetClient.get(ad_path); // added codes
+    GetClient.get(io_path); // added codes
     Serial.println("[HTTP] GET... Weather Requested");
 
     // read the status code and body of the response
@@ -481,25 +456,7 @@ void GetData(){
 
         // Set output to the advice string from the JSON
         // The JSON looks like:   {"slip" : {"advice": advice_string}, ...}
-        current_text = (const char*)doc["current"]["weather"][0]["main"];
-        current_icon = (const char*)doc["current"]["weather"][0]["icon"];
-        current_temp = doc["current"]["temp"]; 
-        
-        time_t day1_date_raw = doc["daily"][1]["dt"];
-        day1_text = (const char*)doc["daily"][1]["weather"][0]["main"];
-        day1_icon = (const char*)doc["daily"][1]["weather"][0]["icon"]; 
-        day1_date = String(String(month(day1_date_raw)) + "/" + String(day(day1_date_raw)));
-        
-        time_t day2_date_raw = doc["daily"][2]["dt"];
-        day2_text = (const char*)doc["daily"][2]["weather"][0]["main"];
-        day2_icon = (const char*)doc["daily"][2]["weather"][0]["icon"]; 
-        day2_date = String(String(month(day2_date_raw)) + "/" + String(day(day2_date_raw)));
-        
-        time_t day3_date_raw = doc["daily"][3]["dt"];
-        day3_text = (const char*)doc["daily"][3]["weather"][0]["main"];
-        day3_icon = (const char*)doc["daily"][3]["weather"][0]["icon"];
-        day3_date = String(String(month(day3_date_raw)) + "/" + String(day(day3_date_raw)));
-
+        currentValue = (const char*)doc["last_value"];
 
     } else if (statusCode > 0) {
         // Server issue
@@ -513,4 +470,54 @@ void GetData(){
     } else {
     Serial.println("[WIFI] Not connected");
   }  
-}   
+} 
+
+void PostData(String myMessage) {
+  // Make sure we're connected to WiFi
+  if (WiFi.status() == WL_CONNECTED) {
+
+    Serial.println("[POST] Creating request with value: " + myMessage);
+    PostClient.beginRequest();
+    PostClient.post(io_path); // Add in the path for the Adafruit IO feed
+
+    // Add message header with access key
+    //    Parameter (String): https://io.adafruit.com/api/docs/#section/Authentication > HeaderKey
+    //    Value (String): the api key
+    PostClient.sendHeader("X-AIO-Key", io_key); // Add in the API key here
+
+    // Add header with the content type of the message 
+    //    Tell the server that the type of content we're sending is JSON
+    PostClient.sendHeader("Content-Type", "application/json"); // fill in the header type to specify JSON data
+
+    // Format myMessage to JSON
+    DynamicJsonDocument doc(300);          // create object with arbitrary size 1000
+    doc["last_value"] = myMessage;              // set { "value" : myMessage }
+    String formatted_data;
+    serializeJson(doc, formatted_data);    // save JSON-formatted String to formatted_data
+    PostClient.sendHeader("Content-Length", formatted_data.length()); // fill in the header type to send the length of data
+
+    // Post data, along with headers
+    PostClient.beginBody();
+    PostClient.print(formatted_data);
+    PostClient.endRequest();
+
+    // Handle response from Server
+    int statusCode = PostClient.responseStatusCode();
+    String response = PostClient.responseBody();
+    if (statusCode == 200) {
+      // Response indicated OK
+      Serial.println("[HTTP] POST was successful!"); 
+    } else if (statusCode > 0) {
+      // Server response received
+      Serial.print("[HTTP] POST... Received response code: "); 
+      Serial.println(statusCode);
+    } else {
+      // httpCode will be negative on Client error
+      Serial.print("[HTTP] POST... Failed, error: "); 
+      Serial.println(statusCode);
+    }
+  } else {
+    Serial.println("[WIFI] Not connected");
+  }
+}
+  
