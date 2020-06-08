@@ -1,6 +1,6 @@
 /******************************* WIFI **************************************/
 // Fill in your wifi SSID and password below
-const char* wifi_ssid = "TP-Link_Extender";  // network name -- put your WiFi SSID here
+const char* wifi_ssid = "HOME-D740-2.4";  // network name -- put your WiFi SSID here
 const char* wifi_password = "A3D4H9333EADL933";     // network password -- enter your WiFi password (if one is needed)
 
 /******************** thebeachhouse API Config ***************************/

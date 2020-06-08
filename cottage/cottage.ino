@@ -2,9 +2,11 @@
  Smart Product Project 3- Beach House
  by Olga Saadi and Jenny Wang
  5/31/2020
+
  
  */
 #include "config.h"  // wifi credentials & API info go here
+#include "apikey.h"
 
 #include <U8g2lib.h>
 #include <U8x8lib.h>
@@ -30,6 +32,10 @@
 #include <KT403A_Player.h>
 #include "wiring_private.h"
 
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+  #include <avr/power.h>
+#endif
 
 //---------------------------------
 //         OLED Variables     
@@ -41,19 +47,21 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 // WiFi and HTTP objects
 WiFiSSLClient wifi;
-HttpClient GetClient = HttpClient(wifi, ad_host, ad_port);
+HttpClient GetClient = HttpClient(wifi, io_host, io_port);
+HttpClient PostClient = HttpClient(wifi, io_host, io_port);
 
-// Strings to GET and POST
-String weather;
 
 //---------------------------------
 //      Defintions & Variables     
 //---------------------------------
 
-#define BUTTON1PIN 2  //BUTTON0 is used for toggling
-#define BUTTON2PIN 4  //BUTTON1 is used for confirmation
-#define BUTTON3PIN 6  //BUTTON2 is used for rejection/cancellation
+#define BUTTON1PIN 2  //BUTTON0 is used for banana bread Message
+#define BUTTON2PIN 4 // Button for KG message
+#define BUTTON3PIN 6  //BUTTON1 is used for confirmation
+#define BUTTON4PIN A0  //BUTTON2 is used for rejection/cancellation
 #define V30
+#define LED A2 // CHOOSE PIN
+#define NUMPIXELS      11  // Number of LEDs on strip
 
 #define ShowSerial SerialUSB // the serial port used for displaying info and reading user input
 #define COMSerial mySerial // the serial port used for UART communication with the mp3 player
@@ -74,22 +82,29 @@ void SERCOM0_Handler()
 String inputCommand; // string for holding input commands
 
 
+/////////////////////////////////// Declare our NeoPixel strip object:
+
+Adafruit_NeoPixel strip(NUMPIXELS, LED, NEO_GRB + NEO_KHZ800);
+int delayval = 500; // delay for half a second
+
+ 
 //---------------------------------
 //     Event & State Variables     
 //---------------------------------
 
 // Renaming events to have more useful names
 // (you can add more and rename as needed)
-#define EVENTBUTTON1DOWN EventManager::kEventUser0
-#define EVENTBUTTON2DOWN EventManager::kEventUser1
-#define EVENTBUTTON3DOWN EventManager::kEventUser2
-
+#define EVENTBUTTON1DOWN EventManager::kEventUser0 // send message 1
+#define EVENTBUTTON2DOWN EventManager::kEventUser1 // send message 2
+#define EVENTBUTTON3DOWN EventManager::kEventUser2 // event accepted
+#define EVENTBUTTON4DOWN EventManager::kEventUser3 // event denied
+#define EVENTTIMER EventManager::kEventUser4 // event timer
 
 // Create the Event Manager
 EventManager eventManager;
 
 // Create the different states for the state machine
-enum SystemState_t {INIT, OFF, SELECT_MESSAGE, WAIT_RESPONSE, RECEIVE_RESPONSE, RECEIVE_MESSAGE};
+enum SystemState_t {INIT, OFF, MESSAGE_RECEIVED};
 
 // Create and set a variable to store the current state
 SystemState_t currentState = INIT;
@@ -137,15 +152,6 @@ void setup() {
   }
   Serial.println("WiFi successfully connected");
   digitalWrite(LED_BUILTIN, LOW); // turn off light once connected
-
-  
-  ////////////////////  try to communicate with seria
-  if (!tempsensor.begin(I2C_ADDRESS)) {
-    Serial.println("Couldn't find MCP9808! Check your connections and verify the address is correct.");
-    while (1);
-  }  
-  Serial.println("Found MCP9808!");
-  tempsensor.setResolution(0); 
   
   ////////////////////  Set up the OLED
   u8g2.begin(); 
@@ -159,10 +165,13 @@ void setup() {
   u8g2.setFont(u8g2_font_6x10_tf);
 
 
+
   // Attach event checkers to the state machine
-  eventManager.addListener(EVENTBUTTON0DOWN, BEACH_HOUSE_SM);
   eventManager.addListener(EVENTBUTTON1DOWN, BEACH_HOUSE_SM);
   eventManager.addListener(EVENTBUTTON2DOWN, BEACH_HOUSE_SM);
+  eventManager.addListener(EVENTBUTTON3DOWN, BEACH_HOUSE_SM);
+  eventManager.addListener(EVENTBUTTON4DOWN, BEACH_HOUSE_SM);
+  eventManager.addListener(EVENTTIMER, BEACH_HOUSE_SM);
   
     // Initialize state machine
   BEACH_HOUSE_SM(INIT,0);
@@ -182,9 +191,11 @@ void loop() {
   //    Add all of your event checking functions here
   //    Rename and add more as needed
   
-  OnBUTTON0DOWN();
   OnBUTTON1DOWN();
   OnBUTTON2DOWN();
+  OnBUTTON3DOWN();
+  OnBUTTON4DOWN();
+  OnTIMER();
 
 }
 
@@ -198,25 +209,10 @@ void loop() {
  *    Change function names as desired. */
 
 
-void OnBUTTON0DOWN() {
-
-  static int lastButtonReading = LOW;
-  int thisButtonReading = digitalRead(BUTTONPIN0);
-
-  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
-  //      If it did, update eventHappened flag (and parameter, if desired)
-  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
-    eventManager.queueEvent(EVENTBUTTON0DOWN, 0); 
-    delay(100);
-  }
-  lastButtonReading = thisButtonReading;
-}
-
-
 void OnBUTTON1DOWN() {
 
   static int lastButtonReading = LOW;
-  int thisButtonReading = digitalRead(BUTTONPIN1);
+  int thisButtonReading = digitalRead(BUTTON1PIN);
 
   // Check if this event happened (e.g., button is pressed, timer expired, etc.):
   //      If it did, update eventHappened flag (and parameter, if desired)
@@ -231,7 +227,7 @@ void OnBUTTON1DOWN() {
 void OnBUTTON2DOWN() {
 
   static int lastButtonReading = LOW;
-  int thisButtonReading = digitalRead(BUTTONPIN2);
+  int thisButtonReading = digitalRead(BUTTON2PIN);
 
   // Check if this event happened (e.g., button is pressed, timer expired, etc.):
   //      If it did, update eventHappened flag (and parameter, if desired)
@@ -243,6 +239,34 @@ void OnBUTTON2DOWN() {
 }
 
 
+void OnBUTTON3DOWN() {
+
+  static int lastButtonReading = LOW;
+  int thisButtonReading = digitalRead(BUTTON3PIN);
+
+  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
+  //      If it did, update eventHappened flag (and parameter, if desired)
+  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
+    eventManager.queueEvent(EVENTBUTTON3DOWN, 0); 
+    delay(100);
+  }
+  lastButtonReading = thisButtonReading;
+}
+
+void OnBUTTON4DOWN() {
+
+  static int lastButtonReading = LOW;
+  int thisButtonReading = digitalRead(BUTTON4PIN);
+
+  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
+  //      If it did, update eventHappened flag (and parameter, if desired)
+  if (thisButtonReading == HIGH && (thisButtonReading != lastButtonReading)) {
+    eventManager.queueEvent(EVENTBUTTON4DOWN, 0); 
+    delay(100);
+  }
+  lastButtonReading = thisButtonReading;
+}
+
 void OnTIMER() {
   
   static int startTime = millis();       // Change type as needed
@@ -250,11 +274,13 @@ void OnTIMER() {
 
   // Check if this event happened (e.g., button is pressed, timer expired, etc.):
   //      If it did, update eventHappened flag (and parameter, if desired)
-  if (totaLength >= 5000) {
+  if (totaLength >= 60000) {
     startTime = millis();
-    eventManager.queueEvent(EVENTTIMER1, 0);
+    eventManager.queueEvent(EVENTTIMER, 0);
   }
 }
+
+
 
 //---------------------------------
 //           State Machine  
@@ -269,292 +295,136 @@ void BEACH_HOUSE_SM( int event, int param )
   // Initialize next state
   SystemState_t nextState = currentState;
 
-  // Handle events based on the current state
+ // Handle events based on the current state
   switch (currentState) {
     case INIT:
       Serial.println("STATE: Initialization");
-      pinMode(BUTTONPIN, INPUT);
+      pinMode(BUTTON1PIN, INPUT);
+
+      // Set up the LED Strip
+      strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
+      strip.show();            // Turn OFF all pixels ASAP
+      strip.setBrightness(250); // Set BRIGHTNESS 
+      
+      
+      // LEDs shine white to show initialization
+      LED_ON(250,250,250);
+      LED_OFF;     
+      delay (3000);
+      
+      // PRINT IN LED SCREEN "READY"   
+      Serial.println("System Ready");
+      u8g2.clearBuffer();
+      u8g2.setFont(u8g2_font_VCR_OSD_tf);
+      u8g2.drawStr(20, 16, "System Ready");
+      u8g2.setFont(u8g2_font_7x13_tf);
+      u8g2.sendBuffer();
       
       // Transition to a different state
-      Serial.println("    Transitioning to State: MODE1");
-      readSensor();
-      printSensor();
-      GetData();
-      nextState = MODE1;
+      nextState = OFF; 
       break;
+
 
     case OFF:
-      Serial.println("STATE: MODE1");
+      Serial.println("STATE: OFF");
+      strip.clear();
+      u8g2.clearBuffer();
       
-      if(event == EVENTTIMER1){
-        Serial.println("Shutdown MCP9808.... ");
-        tempsensor.shutdown_wake(1); // shutdown MSP9808 - power consumption ~0.1 mikro Ampere, stops temperature sampling
-        Serial.println("");
-           
-        readSensor();
-        printSensor();
-        if ((roomTemp > higherLimit) || (roomTemp < lowerLimit)){
-          Serial.println("ALERT!!");
+      if(event == EVENTTIMER){
+        Serial.println("Response being received");
+        String currentValue = GetData();
+        
+        if (currentValue == "bananabread"){
+          LED_ON(0,250,0);
+          Serial.println("bananabread");
           u8g2.clearBuffer();
           u8g2.setFont(u8g2_font_VCR_OSD_tf);
-          u8g2.drawStr(20, 16, "ALERT!");
+          u8g2.drawStr(20, 16, "banana bread time!");
           u8g2.setFont(u8g2_font_7x13_tf);
           u8g2.sendBuffer();
-          nextState = ALERT;
+          nextState = MESSAGE_RECEIVED;
           } 
-      }
 
-      else if (event == EVENTTIMER2){
-        GetData();
-        }
-        
-      else if(event == EVENTBUTTONDOWN){ 
-        Serial.println("    Transitioning to State: MODE2");
-        nextState = MODE2;
-        Serial.println(roomTemp);
-        Serial.println(averageTemp);
-        Serial.println(minTemp);
-        Serial.println(maxTemp);
-        u8g2.clearBuffer();
-        drawFloat(5, 40, roomTemp);
-        drawFloat(41, 40, averageTemp);
-        drawFloat(71, 40, minTemp);
-        drawFloat(101, 40, maxTemp);
-        u8g2.drawStr(5, 20, "Room");
-        u8g2.drawStr(41, 20, "Avg");
-        u8g2.drawStr(71, 20, "Min");
-        u8g2.drawStr(101, 20, "Max");
-        u8g2.sendBuffer();
-      } 
-      
-      break; 
-      
-    case MODE2:
-      Serial.println("STATE: MODE2");
-      
-      if(event == EVENTTIMER1){
-        Serial.println("Shutdown MCP9808.... ");
-        tempsensor.shutdown_wake(1); // shutdown MSP9808 - power consumption ~0.1 mikro Ampere, stops temperature sampling
-        Serial.println("");
-        nextState = MODE2;
-        readSensor();
-        Serial.println(roomTemp);
-        Serial.println(averageTemp);
-        Serial.println(minTemp);
-        Serial.println(maxTemp);
-        u8g2.clearBuffer();
-        drawFloat(5, 40, roomTemp);
-        drawFloat(41, 40, averageTemp);
-        drawFloat(71, 40, minTemp);
-        drawFloat(101, 40, maxTemp);
-        u8g2.drawStr(5, 20, "Room");
-        u8g2.drawStr(41, 20, "Avg");
-        u8g2.drawStr(71, 20, "Min");
-        u8g2.drawStr(101, 20, "Max");
-        u8g2.sendBuffer();
-        
-        if ((roomTemp > higherLimit) || (roomTemp < lowerLimit)){
-          Serial.println("ALERT!!");
+        else if (currentValue == "friday"){        
+          LED_ON(250,0,0);
+          Serial.println("friday");
           u8g2.clearBuffer();
           u8g2.setFont(u8g2_font_VCR_OSD_tf);
-          u8g2.drawStr(20, 16, "ALERT!");
-          u8g2.drawStr(20, 41, "So Hot!");
+          u8g2.drawStr(20, 16, "friday!!");
           u8g2.setFont(u8g2_font_7x13_tf);
           u8g2.sendBuffer();
-          nextState = ALERT;
-          } 
-        } 
-      
-      else if (event == EVENTTIMER2){
-        GetData();
-        }
-        
-      else if(event == EVENTBUTTONDOWN){ 
-        Serial.println("    Transitioning to State: MODE3");
-        nextState = MODE3;
-        Serial.println(current_text);
-        Serial.println(current_icon);
-        Serial.println(current_temp);
-        u8g2.clearBuffer();
-        drawString(5, 30,current_text);        
-        drawIcon(50, 25, current_text);
-        drawFloat(92, 30, current_temp);
-        u8g2.sendBuffer();
-        
-        }  
-      break; 
-
-    case MODE3:
-      Serial.println("STATE: MODE3");
-      
-      if(event == EVENTTIMER2){
-        GetData();
-        u8g2.clearBuffer();
-        drawString(5, 30,current_text);        
-        drawIcon(50, 25, current_text);
-        drawFloat(92, 30, current_temp);
-        u8g2.sendBuffer();
-        } 
-       
-      else if (event == EVENTTIMER1){
-        readSensor();
-        if ((roomTemp > higherLimit) || (roomTemp < lowerLimit)){
-          Serial.println("ALERT!!");
-          u8g2.clearBuffer();
-          u8g2.setFont(u8g2_font_VCR_OSD_tf);
-          u8g2.drawStr(20, 16, "ALERT!");
-          u8g2.drawStr(20, 41, "So Hot!");
-          u8g2.setFont(u8g2_font_7x13_tf);
-          u8g2.sendBuffer();
-          nextState = ALERT;
-          } 
-        }
-        
-      else if(event == EVENTBUTTONDOWN){ 
-        Serial.println("    Transitioning to State: MODE4");
-        nextState = MODE4;
-        Serial.print(day1_date);
-        Serial.print(day1_text);
-        Serial.print(day1_icon);
-        Serial.print(day2_date);
-        Serial.print(day2_text);
-        Serial.print(day2_icon);
-        Serial.print(day3_date);
-        Serial.print(day3_text);
-        Serial.print(day3_icon);
-        u8g2.clearBuffer();
-        drawString(5,5,day1_date);
-        drawString(52,5,day2_date);
-        drawString(92,5,day3_date);
-        drawString(5,22,day1_text);
-        drawString(52,22,day2_text);
-        drawString(92,22,day3_text);
-        drawIcon(5, 38, day1_text);
-        drawIcon(52, 40, day2_text);
-        drawIcon(92, 40, day3_text);
-        u8g2.sendBuffer();
-        
-        }  
-      break; 
-
-    case MODE4:
-      Serial.println("STATE: MODE4");
-
-      if(event == EVENTTIMER2){
-        GetData();
-        Serial.print(day1_date);
-        Serial.print(day1_text);
-        Serial.print(day1_icon);
-        Serial.print(day2_date);
-        Serial.print(day2_text);
-        Serial.print(day2_icon);
-        Serial.print(day3_date);
-        Serial.print(day3_text);
-        Serial.print(day3_icon);
-        u8g2.clearBuffer();
-        drawString(5,5,day1_date);
-        drawString(52,5,day2_date);
-        drawString(92,5,day3_date);
-        drawString(5,22,day1_text);
-        drawString(52,22,day2_text);
-        drawString(92,22,day3_text);
-        drawIcon(5, 38, day1_text);
-        drawIcon(52, 40, day2_text);
-        drawIcon(92, 40, day3_text);
-        u8g2.sendBuffer();
-        
-        } 
-
-      else if (event == EVENTTIMER1){
-      readSensor();
-      if ((roomTemp > higherLimit) || (roomTemp < lowerLimit)){
-        Serial.println("ALERT!!");
-        u8g2.clearBuffer();
-        u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "ALERT!");
-        u8g2.drawStr(20, 41, "So Hot!");
-        u8g2.setFont(u8g2_font_7x13_tf);
-        u8g2.sendBuffer();
-        nextState = ALERT;
-        } 
-      }
-      else if(event == EVENTBUTTONDOWN){ 
-        Serial.println("    Transitioning to State: MODE1");
-        nextState = MODE1;
-        printSensor();
-        }  
-        
-      break; 
-      
-    case ALERT:
-      Serial.println("STATE: ALERT");
-      if(event == EVENTBUTTONDOWN) { 
-        nextState = MODE1;
-        printSensor();
-      } 
-      else if (event == EVENTTIMER1) {
-        readSensor();
-      }
+          nextState = MESSAGE_RECEIVED;
+        }   
+      }       
       break;
+    
+    case MESSAGE_RECEIVED:
+      Serial.println("STATE: MESSAGE_RECEIVED");
       
+      //RESPONSE CHECKER FUNCTION, STAY IN THIS STATE UNTIL RESPONSE IS IDENTIFIED  
+
+      if (event == EVENTBUTTON3DOWN){
+      PostData("accepted");
+      Serial.println("YESSSS");
+      LED_ON(250,250,250);
+      nextState=OFF;
+      }
+      
+      if (event == EVENTBUTTON4DOWN){
+      PostData("rejected");
+      Serial.println("No Thanks");
+      LED_ON(250,250,250);
+      nextState=OFF;    
+      }   
+      break; 
+
     default:
       Serial.println("STATE: Unknown State");
       break;
   }
-
+    
   // Update the current state
   currentState = nextState;
-}
+  
+  }
 
 
 //---------------------------------
 //        Helper Functions     
 //---------------------------------
 
-
-void readSensor(){
-  static int sumTemp = 0;
-  static int count = 0;
-  
-  tempsensor.wake();   // wake up, ready to read!
-
-  // Read and print out the temperature, also shows the resolution mode used for reading.
-  roomTemp = round(tempsensor.readTempC());
-
-  sumTemp = sumTemp + roomTemp;
-  count ++;
-  
-  averageTemp = sumTemp / count;
-  if (roomTemp < minTemp) {
-    minTemp = roomTemp;
-  }
-    
-  if(roomTemp > maxTemp) {
-    maxTemp = roomTemp;
-  }
- 
+void LED_ON (int x, int y, int z)
+{   
+  for(int i=0;i<NUMPIXELS;i++)
+      {
+       strip.setPixelColor(i, x, y, z);
+       strip.show();
+       Serial.println(i);
+       delay(100); // Delay for a period of time (in milliseconds)
+      }
 }
 
-void printSensor(){
-  Serial.print("Temp: "); 
-  Serial.print(roomTemp); Serial.print("*C\t");
-  u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_VCR_OSD_tf);
-  drawFloat(45,40,roomTemp);  
-  u8g2.setFont(u8g2_font_7x13_tf);
-  u8g2.drawStr(10, 20, "Room Temperature");
-  u8g2.sendBuffer();
-  
+void LED_OFF()
+{
+  for(int i=0;i<NUMPIXELS;i++)
+      {
+       strip.setPixelColor(i, 0,0, 0);
+       strip.show();
+       Serial.println(i);
+       delay(100); // Delay for a period of time (in milliseconds)
+      }
 }
+  
 
 
-void GetData(){
+String GetData(){
   // Make sure we're connected to WiFi
+  String output = "";
   if (WiFi.status() == WL_CONNECTED) {
 
     // Create a GET request to the advice path
-    GetClient.get(ad_path); // added codes
-    Serial.println("[HTTP] GET... Weather Requested");
+    GetClient.get(io_response_path); // added codes
+    Serial.println("[HTTP] GET... response Requested");
 
     // read the status code and body of the response
     int statusCode = GetClient.responseStatusCode();
@@ -570,26 +440,10 @@ void GetData(){
 
         // Set output to the advice string from the JSON
         // The JSON looks like:   {"slip" : {"advice": advice_string}, ...}
-        current_text = (const char*)doc["current"]["weather"][0]["main"];
-        current_icon = (const char*)doc["current"]["weather"][0]["icon"];
-        current_temp = doc["current"]["temp"]; 
+        String currentValue = doc["last_value"];
+        output = currentValue;
+        Serial.println(currentValue);       
         
-        time_t day1_date_raw = doc["daily"][1]["dt"];
-        day1_text = (const char*)doc["daily"][1]["weather"][0]["main"];
-        day1_icon = (const char*)doc["daily"][1]["weather"][0]["icon"]; 
-        day1_date = String(String(month(day1_date_raw)) + "/" + String(day(day1_date_raw)));
-        
-        time_t day2_date_raw = doc["daily"][2]["dt"];
-        day2_text = (const char*)doc["daily"][2]["weather"][0]["main"];
-        day2_icon = (const char*)doc["daily"][2]["weather"][0]["icon"]; 
-        day2_date = String(String(month(day2_date_raw)) + "/" + String(day(day2_date_raw)));
-        
-        time_t day3_date_raw = doc["daily"][3]["dt"];
-        day3_text = (const char*)doc["daily"][3]["weather"][0]["main"];
-        day3_icon = (const char*)doc["daily"][3]["weather"][0]["icon"];
-        day3_date = String(String(month(day3_date_raw)) + "/" + String(day(day3_date_raw)));
-
-
     } else if (statusCode > 0) {
         // Server issue
         Serial.print("[HTTP] GET... Received response code: "); 
@@ -599,33 +453,61 @@ void GetData(){
         Serial.print("[HTTP] GET... Failed, error code: "); 
         Serial.println(statusCode);
     }
-    } else {
+  } else {
     Serial.println("[WIFI] Not connected");
-  }  
-}   
+  }
+  
+  Serial.println(output);
+  return output;
+} 
 
-void drawFloat(int x, int y, int num) {
-  String str = String(num) + "C";
-  char text[str.length() + 1];
-  str.toCharArray(text, str.length() + 1);
-  u8g2.drawStr(x, y, text);
-  }
+void PostData(String myMessage) {
+  // Make sure we're connected to WiFi
+  if (WiFi.status() == WL_CONNECTED) {
 
-void drawString(int x, int y, String words) {
-  char text[words.length() + 1];
-  words.toCharArray(text, words.length() + 1);
-  u8g2.drawStr(x, y, text);
-  }
+    Serial.println("[POST] Creating request with value: " + myMessage);
+    PostClient.beginRequest();
+    PostClient.post(io_path); // Add in the path for the Adafruit IO feed
+    
 
+    // Add message header with access key
+    //    Parameter (String): https://io.adafruit.com/api/docs/#section/Authentication > HeaderKey
+    //    Value (String): the api key
+    PostClient.sendHeader("X-AIO-Key", io_key); // Add in the API key here
 
-void drawIcon(int x, int y, String day_text) {
-  if (day_text == "Rain" ){
-  u8g2.drawXBMP(x, y, rain_width, rain_height, rain_bits);
+    // Add header with the content type of the message 
+    //    Tell the server that the type of content we're sending is JSON
+    PostClient.sendHeader("Content-Type", "application/json"); // fill in the header type to specify JSON data
+
+    // Format myMessage to JSON
+    DynamicJsonDocument doc(300);          // create object with arbitrary size 1000
+    doc["value"] = myMessage;              // set { "value" : myMessage }
+    String formatted_data;
+    serializeJson(doc, formatted_data);    // save JSON-formatted String to formatted_data
+    PostClient.sendHeader("Content-Length", formatted_data.length()); // fill in the header type to send the length of data
+
+    // Post data, along with headers
+    PostClient.beginBody();
+    PostClient.print(formatted_data);
+    PostClient.endRequest();
+
+    // Handle response from Server
+    int statusCode = PostClient.responseStatusCode();
+    String response = PostClient.responseBody();
+    if (statusCode == 200) {
+      // Response indicated OK
+      Serial.println("[HTTP] POST was successful!"); 
+    } else if (statusCode > 0) {
+      // Server response received
+      Serial.print("[HTTP] POST... Received response code: "); 
+      Serial.println(statusCode);
+    } else {
+      // httpCode will be negative on Client error
+      Serial.print("[HTTP] POST... Failed, error: "); 
+      Serial.println(statusCode);
+    }
+  } else {
+    Serial.println("[WIFI] Not connected");
   }
-  else if (day_text == "Clouds" ){
-  u8g2.drawXBMP(x, y, few_clouds_day_width, few_clouds_day_height, few_clouds_day_bits);
-  }
-  else if (day_text == "Clear" ){
-  u8g2.drawXBMP(x, y, clear_day_width, clear_day_height, clear_day_bits);
-  }
-  }
+}
+  

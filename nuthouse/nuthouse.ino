@@ -7,6 +7,7 @@
  
  */
 #include "config.h"  // wifi credentials & API info go here
+#include "apikey.h"
 
 #include <U8g2lib.h>
 #include <U8x8lib.h>
