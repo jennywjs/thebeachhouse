@@ -50,8 +50,6 @@ WiFiSSLClient wifi;
 HttpClient GetClient = HttpClient(wifi, io_host, io_port);
 HttpClient PostClient = HttpClient(wifi, io_host, io_port);
 
-// Strings to GET and POST
-String weather;
 
 //---------------------------------
 //      Defintions & Variables     
@@ -64,8 +62,6 @@ String weather;
 #define V30
 #define LED A2 // CHOOSE PIN
 #define NUMPIXELS      11  // Number of LEDs on strip
-
-String currentValue;
 
 #define ShowSerial SerialUSB // the serial port used for displaying info and reading user input
 #define COMSerial mySerial // the serial port used for UART communication with the mp3 player
@@ -278,7 +274,7 @@ void OnTIMER() {
 
   // Check if this event happened (e.g., button is pressed, timer expired, etc.):
   //      If it did, update eventHappened flag (and parameter, if desired)
-  if (totaLength >= 1000) {
+  if (totaLength >= 60000) {
     startTime = millis();
     eventManager.queueEvent(EVENTTIMER, 0);
   }
@@ -330,6 +326,7 @@ void BEACH_HOUSE_SM( int event, int param )
 
 
     case OFF:
+      Serial.println("STATE: OFF");
       strip.clear();
       u8g2.clearBuffer();
       
@@ -348,19 +345,19 @@ void BEACH_HOUSE_SM( int event, int param )
       break;
     
     case WAIT_RESPONSE:
-      Serial.println("STATE: MODE1");
+      Serial.println("STATE: WAIT_RESPONSE");
       
       //RESPONSE CHECKER FUNCTION, STAY IN THIS STATE UNTIL RESPONSE IS IDENTIFIED  
       if(event == EVENTTIMER){
         Serial.println("Response being received");
-        GetData();
+        String currentValue = GetData();
         
         if (currentValue == "accepted"){
           LED_ON(0,250,0);
-          Serial.println("YAS");
+          Serial.println("YESSSS");
           u8g2.clearBuffer();
           u8g2.setFont(u8g2_font_VCR_OSD_tf);
-          u8g2.drawStr(20, 16, "YAS");
+          u8g2.drawStr(20, 16, "YESSSS");
           u8g2.setFont(u8g2_font_7x13_tf);
           u8g2.sendBuffer();
           nextState = REACT_RESPONSE;
@@ -380,6 +377,7 @@ void BEACH_HOUSE_SM( int event, int param )
       break; 
 
     case REACT_RESPONSE:
+      Serial.println("STATE: REACT_RESPONSE");
       static int startTime = millis();
       
       if (event==EVENTBUTTON4DOWN)
@@ -434,13 +432,14 @@ void LED_OFF()
   
 
 
-void GetData(){
+String GetData(){
   // Make sure we're connected to WiFi
+  String output = "";
   if (WiFi.status() == WL_CONNECTED) {
 
     // Create a GET request to the advice path
-    GetClient.get(io_path); // added codes
-    Serial.println("[HTTP] GET... Weather Requested");
+    GetClient.get(io_response_path); // added codes
+    Serial.println("[HTTP] GET... response Requested");
 
     // read the status code and body of the response
     int statusCode = GetClient.responseStatusCode();
@@ -456,8 +455,10 @@ void GetData(){
 
         // Set output to the advice string from the JSON
         // The JSON looks like:   {"slip" : {"advice": advice_string}, ...}
-        currentValue = (const char*)doc["last_value"];
-
+        String currentValue = doc["last_value"];
+        output = currentValue;
+        Serial.println(currentValue);       
+        
     } else if (statusCode > 0) {
         // Server issue
         Serial.print("[HTTP] GET... Received response code: "); 
@@ -467,9 +468,12 @@ void GetData(){
         Serial.print("[HTTP] GET... Failed, error code: "); 
         Serial.println(statusCode);
     }
-    } else {
+  } else {
     Serial.println("[WIFI] Not connected");
-  }  
+  }
+  
+  Serial.println(output);
+  return output;
 } 
 
 void PostData(String myMessage) {
@@ -479,6 +483,7 @@ void PostData(String myMessage) {
     Serial.println("[POST] Creating request with value: " + myMessage);
     PostClient.beginRequest();
     PostClient.post(io_path); // Add in the path for the Adafruit IO feed
+    
 
     // Add message header with access key
     //    Parameter (String): https://io.adafruit.com/api/docs/#section/Authentication > HeaderKey
@@ -491,7 +496,7 @@ void PostData(String myMessage) {
 
     // Format myMessage to JSON
     DynamicJsonDocument doc(300);          // create object with arbitrary size 1000
-    doc["last_value"] = myMessage;              // set { "value" : myMessage }
+    doc["value"] = myMessage;              // set { "value" : myMessage }
     String formatted_data;
     serializeJson(doc, formatted_data);    // save JSON-formatted String to formatted_data
     PostClient.sendHeader("Content-Length", formatted_data.length()); // fill in the header type to send the length of data
