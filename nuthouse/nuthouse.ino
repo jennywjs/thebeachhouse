@@ -54,8 +54,8 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 #define BUTTON1PIN 2  //BUTTON0 is used for banana bread Message
 #define BUTTON2PIN 4 // Button for KG message
-#define BUTTON3PIN 6  //BUTTON1 is used for confirmation
-#define BUTTON4PIN A0  //BUTTON2 is used for rejection/cancellation
+#define BUTTON3PIN A0  //BUTTON1 is used for confirmation
+#define BUTTON4PIN A2  //BUTTON2 is used for rejection/cancellation
 #define V30
 #define LED A2 // CHOOSE PIN
 #define NUMPIXELS      11  // Number of LEDs on strip
