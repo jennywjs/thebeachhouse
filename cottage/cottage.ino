@@ -57,7 +57,7 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 #define BUTTON4PIN A2  //BUTTON2 is used for rejection/cancellation
 #define V30
 #define LED A2 // CHOOSE PIN
-#define NUMPIXELS      11  // Number of LEDs on strip
+#define NUMPIXELS      10  // Number of LEDs on strip
 
 #define ShowSerial SerialUSB // the serial port used for displaying info and reading user input
 #define COMSerial mySerial // the serial port used for UART communication with the mp3 player
@@ -326,13 +326,12 @@ void BEACH_HOUSE_SM( int event, int param )
       // Set up the LED Strip
       strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
       strip.show();            // Turn OFF all pixels ASAP
-      strip.setBrightness(250); // Set BRIGHTNESS 
+      strip.setBrightness(100); // Set BRIGHTNESS 
       
       
       // LEDs shine white to show initialization
       LED_ON(250,250,250);
       LED_OFF;     
-      delay (3000);
       
       // PRINT IN LED SCREEN "READY"   
       Serial.println("System Ready");
@@ -351,10 +350,11 @@ void BEACH_HOUSE_SM( int event, int param )
     case OFF:
       Serial.println("STATE: OFF");
       strip.clear();
+      strip.show();      
       u8g2.clearBuffer();
             
-      if (event == EVENTCALLBACK && param == 1){
-        LED_ON(0,250,0);
+      if (event == EVENTCALLBACK && param == 1){ //banana message incoming
+        LED_ON(250,250,250); //LEDs shine white to indicate incoming message
         Mp3Player.controller->playSDSong("jeffsound.mp3"); 
         Serial.println("bananabread");
         u8g2.clearBuffer();
@@ -366,8 +366,8 @@ void BEACH_HOUSE_SM( int event, int param )
         Serial.println("Next State: MESSAGE_RECEIVED");  
         } 
 
-      else if (event == EVENTCALLBACK && param == 0){        
-        LED_ON(250,0,0);
+      else if (event == EVENTCALLBACK && param == 0){  //friday incoming      
+        LED_ON(250,250,250); //LEDs shine white to indicate incoming message
         Mp3Player.controller->playSDSong("roysound.mp3"); 
         Serial.println("friday");
         u8g2.clearBuffer();
@@ -383,13 +383,16 @@ void BEACH_HOUSE_SM( int event, int param )
     
     case MESSAGE_RECEIVED:
       Serial.println("STATE: MESSAGE_RECEIVED");
+      static int startTime = millis();
       
-      //RESPONSE CHECKER FUNCTION, STAY IN THIS STATE UNTIL RESPONSE IS IDENTIFIED  
+      //RESPONSE CHECKER FUNCTION, STAY IN THIS STATE UNTIL RESPONSE IS IDENTIFIED
+      //in this state, sound is only played once but LED display and lights stay on 
+      //time out occurs in 30 minutes -- there wont be any food left after that anyway  
 
       if (event == EVENTBUTTON3DOWN){
       client.publish(feed, "accepted");
       Serial.println("YESSSS");
-      LED_ON(250,250,250);
+      LED_ON(0,250,0);
       nextState=OFF;
       Serial.println("Next State: OFF"); 
       }
@@ -397,10 +400,16 @@ void BEACH_HOUSE_SM( int event, int param )
       if (event == EVENTBUTTON4DOWN){
       client.publish(feed, "rejected");
       Serial.println("No Thanks");
-      LED_ON(250,250,250);
+      LED_ON(250,0,0);
       nextState=OFF;
       Serial.println("Next State: OFF");    
       }   
+
+      if(startTime>1800000)
+      {
+        Serial.println("message timed out");
+        nextState=OFF;
+      }
       break; 
 
     default:
@@ -427,6 +436,7 @@ void LED_ON (int x, int y, int z)
        Serial.println(i);
        delay(100); // Delay for a period of time (in milliseconds)
       }
+ delay(3000);
 }
 
 void LED_OFF()

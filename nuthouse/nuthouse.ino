@@ -57,8 +57,8 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 #define BUTTON3PIN A0  //BUTTON1 is used for confirmation
 #define BUTTON4PIN A2  //BUTTON2 is used for rejection/cancellation
 #define V30
-#define LED A2 // CHOOSE PIN
-#define NUMPIXELS      11  // Number of LEDs on strip
+#define LED A2 // pin is the same as button -- change button pin.  
+#define NUMPIXELS      10  // Number of LEDs on strip
 
 #define ShowSerial SerialUSB // the serial port used for displaying info and reading user input
 #define COMSerial mySerial // the serial port used for UART communication with the mp3 player
@@ -320,13 +320,12 @@ void BEACH_HOUSE_SM( int event, int param )
       // Set up the LED Strip
       strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
       strip.show();            // Turn OFF all pixels ASAP
-      strip.setBrightness(250); // Set BRIGHTNESS 
+      strip.setBrightness(100); // Set BRIGHTNESS 
       
       
-      // LEDs shine white to show initialization
+      // LEDs shine white one by one to show initialization. Then turn off also 1 by 1
       LED_ON(250,250,250);
-      LED_OFF;     
-      delay (3000);
+      LED_OFF();     
       
       // PRINT IN LED SCREEN "READY"   
       Serial.println("System Ready");
@@ -344,12 +343,14 @@ void BEACH_HOUSE_SM( int event, int param )
     case OFF:
       Serial.println("STATE: OFF");
       strip.clear();
+      strip.show();         // double checking that LED strip is off. 
       u8g2.clearBuffer();
       
       if (event == EVENTBUTTON1DOWN){     
         client.publish(feed, "bananabread");
   //      PostData("bananabraed");
-        LED_ON(250,250,250);
+        LED_ON(250,250,250); // LEDS light on white one by one to indicate message sent. 
+        LED_OFF(); //LEDs turn off one by one -- just cuz its cute. 
         nextState=WAIT_RESPONSE;
         Serial.println("Next State: WAIT_RESPONSE");
       }
@@ -358,6 +359,7 @@ void BEACH_HOUSE_SM( int event, int param )
         client.publish(feed, "friday");
 //        PostData("friday");
         LED_ON(250,250,250);
+        LED_OFF();
         nextState=WAIT_RESPONSE;    
         Serial.println("Next State: WAIT_RESPONSE");
       }
@@ -366,15 +368,16 @@ void BEACH_HOUSE_SM( int event, int param )
     
     case WAIT_RESPONSE:
       Serial.println("STATE: WAIT_RESPONSE");
+      static int startTime = millis();
       
       //RESPONSE CHECKER FUNCTION, STAY IN THIS STATE UNTIL RESPONSE IS IDENTIFIED 
-      if(event == EVENTCALLBACK && param == 1){
+      if(event == EVENTCALLBACK && param == 1){          //if cottage responds yes
         Serial.println("Response being received"); 
-        LED_ON(0,250,0);
+        LED_ON(0,250,0);                                //lights in nuthouse turn green
         Serial.println("YESSSS");
         u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "YESSSS");
+        u8g2.drawStr(20, 16, "YESSSS");                 //LED in nuthouse shows yes
         u8g2.setFont(u8g2_font_7x13_tf);
         u8g2.sendBuffer();
         nextState = REACT_RESPONSE;
@@ -382,8 +385,8 @@ void BEACH_HOUSE_SM( int event, int param )
       } 
         
       else if(event == EVENTCALLBACK && param == 0){
-        Serial.println("Response being received"); 
-        LED_ON(0,250,0);
+        Serial.println("Response being received");        //if cottage responds no
+        LED_ON(250,0,0);                                  //light in nuthause shines red. 
         Serial.println("No Thanks");
         u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_VCR_OSD_tf);
@@ -394,10 +397,11 @@ void BEACH_HOUSE_SM( int event, int param )
         Serial.println("Next State: REACT_RESPONSE");
       } 
 
-      else if(event == EVENTBUTTON4DOWN){
+      else if(event == EVENTBUTTON4DOWN || startTime>1800000){   //if nuthause cancels message sent or we time out
         nextState = OFF;
         Serial.println("Next State: OFF");
       }
+
       
       break; 
 
@@ -405,13 +409,13 @@ void BEACH_HOUSE_SM( int event, int param )
       Serial.println("STATE: REACT_RESPONSE");
       static int startTime = millis();
       
-      if (event==EVENTBUTTON4DOWN) {
+      if (event==EVENTBUTTON4DOWN) {            //dismissed in nuthause by pressing button 4
         LED_OFF;
         nextState = OFF;
         Serial.println("Next State: OFF");
       }
       
-      else if(startTime > 120000) {
+      else if(startTime > 120000) {               // light is on for 2 minutes. will automatically turn off 
         LED_OFF;
         nextState = OFF;
         Serial.println("Next State: OFF");
@@ -441,6 +445,7 @@ void LED_ON (int x, int y, int z)
        Serial.println(i);
        delay(100); // Delay for a period of time (in milliseconds)
       }
+  delay(3000);
 }
 
 void LED_OFF()
