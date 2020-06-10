@@ -1,7 +1,7 @@
 /*
  Smart Product Project 3- Beach House
  by Olga Saadi and Jenny Wang
- 5/31/2020
+ 6/10/2020
 
  
  */
