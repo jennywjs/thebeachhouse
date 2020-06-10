@@ -342,7 +342,7 @@ void BEACH_HOUSE_SM( int event, int param )
 
     case OFF:
       Serial.println("STATE: OFF");
-      LED_OFF;  
+      LED_OFF(); 
       strip.clear();
       strip.show();         // double checking that LED strip is off. 
       u8g2.clearBuffer();
@@ -351,7 +351,11 @@ void BEACH_HOUSE_SM( int event, int param )
         client.publish(feed, "bananabread");
   //      PostData("bananabraed");
         LED_ON(250,250,250); // LEDS light on white one by one to indicate message sent. 
-        LED_OFF(); //LEDs turn off one by one -- just cuz its cute. 
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_VCR_OSD_tf);
+        u8g2.drawStr(20, 16, "banana bread time!");
+        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.sendBuffer();
         nextState=WAIT_RESPONSE;
         Serial.println("Next State: WAIT_RESPONSE");
       }
@@ -360,7 +364,11 @@ void BEACH_HOUSE_SM( int event, int param )
         client.publish(feed, "friday");
 //        PostData("friday");
         LED_ON(250,250,250);
-        LED_OFF();
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_VCR_OSD_tf);
+        u8g2.drawStr(20, 16, "fryday!");
+        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.sendBuffer();
         nextState=WAIT_RESPONSE;    
         Serial.println("Next State: WAIT_RESPONSE");
       }
@@ -374,11 +382,11 @@ void BEACH_HOUSE_SM( int event, int param )
       //RESPONSE CHECKER FUNCTION, STAY IN THIS STATE UNTIL RESPONSE IS IDENTIFIED 
       if(event == EVENTCALLBACK && param == 1){          //if cottage responds yes
         Serial.println("Response being received"); 
-        LED_ON(0,250,0);                                //lights in nuthouse turn green
+        LED_ON(0,250,0); 
         Serial.println("YESSSS");
         u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "YESSSS");                 //LED in nuthouse shows yes
+        u8g2.drawStr(20, 16, "Coming!");                 //LED in nuthouse shows yes
         u8g2.setFont(u8g2_font_7x13_tf);
         u8g2.sendBuffer();
         nextState = REACT_RESPONSE;
@@ -387,11 +395,11 @@ void BEACH_HOUSE_SM( int event, int param )
         
       else if(event == EVENTCALLBACK && param == 0){
         Serial.println("Response being received");        //if cottage responds no
-        LED_ON(250,0,0);                                  //light in nuthause shines red. 
+        LED_ON(250,0,0);  
         Serial.println("No Thanks");
         u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "No Thanks");
+        u8g2.drawStr(20, 16, "Maybe next time <3");
         u8g2.setFont(u8g2_font_7x13_tf);
         u8g2.sendBuffer();
         nextState = REACT_RESPONSE;
@@ -411,13 +419,23 @@ void BEACH_HOUSE_SM( int event, int param )
       static int startTime2 = millis();
       
       if (event==EVENTBUTTON4DOWN) {            //dismissed in nuthause by pressing button 4
-        LED_OFF;
+        LED_OFF();
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_VCR_OSD_tf);
+        u8g2.drawStr(20, 16, "System Ready");                 //LED in nuthouse shows yes
+        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.sendBuffer();
         nextState = OFF;
         Serial.println("Next State: OFF");
       }
       
       else if(startTime2 > 120000) {               // light is on for 2 minutes. will automatically turn off 
-        LED_OFF;
+        LED_OFF();
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_VCR_OSD_tf);
+        u8g2.drawStr(20, 16, "System Ready!");                 //LED in nuthouse shows yes
+        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.sendBuffer();
         nextState = OFF;
         Serial.println("Next State: OFF");
       }      

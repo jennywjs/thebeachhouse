@@ -331,7 +331,7 @@ void BEACH_HOUSE_SM( int event, int param )
       
       // LEDs shine white to show initialization
       LED_ON(250,250,250);
-      LED_OFF;     
+      LED_OFF();     
       
       // PRINT IN LED SCREEN "READY"   
       Serial.println("System Ready");
@@ -349,7 +349,7 @@ void BEACH_HOUSE_SM( int event, int param )
 
     case OFF:
       Serial.println("STATE: OFF");
-      LED_OFF;      
+      LED_OFF();      
       u8g2.clearBuffer();
             
       if (event == EVENTCALLBACK && param == 1){ //banana message incoming
@@ -391,7 +391,18 @@ void BEACH_HOUSE_SM( int event, int param )
       if (event == EVENTBUTTON3DOWN){
       client.publish(feed, "accepted");
       Serial.println("YESSSS");
+      u8g2.clearBuffer();
+      u8g2.setFont(u8g2_font_VCR_OSD_tf);
+      u8g2.drawStr(20, 16, "Coming!");
+      u8g2.setFont(u8g2_font_7x13_tf);
+      u8g2.sendBuffer();
       LED_ON(0,250,0);
+      LED_OFF(); 
+      u8g2.clearBuffer();
+      u8g2.setFont(u8g2_font_VCR_OSD_tf);
+      u8g2.drawStr(20, 16, "System Ready");
+      u8g2.setFont(u8g2_font_7x13_tf);
+      u8g2.sendBuffer();
       nextState=OFF;
       Serial.println("Next State: OFF"); 
       }
@@ -399,7 +410,18 @@ void BEACH_HOUSE_SM( int event, int param )
       if (event == EVENTBUTTON4DOWN){
       client.publish(feed, "rejected");
       Serial.println("No Thanks");
-      LED_ON(250,0,0);
+      u8g2.clearBuffer();
+      u8g2.setFont(u8g2_font_VCR_OSD_tf);
+      u8g2.drawStr(20, 16, "Maybe next time <3");
+      u8g2.setFont(u8g2_font_7x13_tf);
+      u8g2.sendBuffer();
+      LED_ON(0,250,0);
+      LED_OFF(); 
+      u8g2.clearBuffer();
+      u8g2.setFont(u8g2_font_VCR_OSD_tf);
+      u8g2.drawStr(20, 16, "System Ready");
+      u8g2.setFont(u8g2_font_7x13_tf);
+      u8g2.sendBuffer();
       nextState=OFF;
       Serial.println("Next State: OFF");    
       }   
@@ -407,7 +429,9 @@ void BEACH_HOUSE_SM( int event, int param )
       if(startTime>1800000)
       {
         Serial.println("message timed out");
+        LED_OFF(); 
         nextState=OFF;
+
       }
       break; 
 
