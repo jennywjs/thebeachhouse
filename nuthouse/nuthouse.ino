@@ -342,6 +342,7 @@ void BEACH_HOUSE_SM( int event, int param )
 
     case OFF:
       Serial.println("STATE: OFF");
+      LED_OFF;  
       strip.clear();
       strip.show();         // double checking that LED strip is off. 
       u8g2.clearBuffer();
@@ -407,7 +408,7 @@ void BEACH_HOUSE_SM( int event, int param )
 
     case REACT_RESPONSE:
       Serial.println("STATE: REACT_RESPONSE");
-      static int startTime = millis();
+      static int startTime2 = millis();
       
       if (event==EVENTBUTTON4DOWN) {            //dismissed in nuthause by pressing button 4
         LED_OFF;
@@ -415,7 +416,7 @@ void BEACH_HOUSE_SM( int event, int param )
         Serial.println("Next State: OFF");
       }
       
-      else if(startTime > 120000) {               // light is on for 2 minutes. will automatically turn off 
+      else if(startTime2 > 120000) {               // light is on for 2 minutes. will automatically turn off 
         LED_OFF;
         nextState = OFF;
         Serial.println("Next State: OFF");

@@ -349,8 +349,7 @@ void BEACH_HOUSE_SM( int event, int param )
 
     case OFF:
       Serial.println("STATE: OFF");
-      strip.clear();
-      strip.show();      
+      LED_OFF;      
       u8g2.clearBuffer();
             
       if (event == EVENTCALLBACK && param == 1){ //banana message incoming
