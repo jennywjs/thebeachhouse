@@ -36,6 +36,7 @@
 #ifdef __AVR__
   #include <avr/power.h>
 #endif
+#include <PubSubClient.h>
 
 //---------------------------------
 //         OLED Variables     
@@ -45,11 +46,6 @@
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
-// WiFi and HTTP objects
-WiFiSSLClient wifi;
-HttpClient GetClient = HttpClient(wifi, io_host, io_port);
-HttpClient PostClient = HttpClient(wifi, io_host, io_port);
-
 
 //---------------------------------
 //      Defintions & Variables     
@@ -57,8 +53,8 @@ HttpClient PostClient = HttpClient(wifi, io_host, io_port);
 
 #define BUTTON1PIN 2  //BUTTON0 is used for banana bread Message
 #define BUTTON2PIN 4 // Button for KG message
-#define BUTTON3PIN 6  //BUTTON1 is used for confirmation
-#define BUTTON4PIN A0  //BUTTON2 is used for rejection/cancellation
+#define BUTTON3PIN A0  //BUTTON1 is used for confirmation
+#define BUTTON4PIN A2  //BUTTON2 is used for rejection/cancellation
 #define V30
 #define LED A2 // CHOOSE PIN
 #define NUMPIXELS      11  // Number of LEDs on strip
@@ -87,6 +83,18 @@ String inputCommand; // string for holding input commands
 Adafruit_NeoPixel strip(NUMPIXELS, LED, NEO_GRB + NEO_KHZ800);
 int delayval = 500; // delay for half a second
 
+/////////////////////////////////// MQTT Setup:
+
+// MQTT Parameters (defined in config.h)
+const char* mqttServer = ioHOST;            // Adafruit host
+const char* mqttUsername = ioUSERNAME;      // Adafruit username
+const char* mqttKey = ioKEY;                // Adafruit key
+int mqttPort = defaultPORT;                 // Default MQTT Port
+const char* feed = ioFeed;           //payload[0] (sent) should be set to current counter value
+WiFiClient wifiClient;
+PubSubClient client(wifiClient);
+
+
  
 //---------------------------------
 //     Event & State Variables     
@@ -98,7 +106,7 @@ int delayval = 500; // delay for half a second
 #define EVENTBUTTON2DOWN EventManager::kEventUser1 // send message 2
 #define EVENTBUTTON3DOWN EventManager::kEventUser2 // event accepted
 #define EVENTBUTTON4DOWN EventManager::kEventUser3 // event denied
-#define EVENTTIMER EventManager::kEventUser4 // event timer
+#define EVENTCALLBACK EventManager::kEventUser4 // event timer
 
 // Create the Event Manager
 EventManager eventManager;
@@ -126,32 +134,26 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH); 
 
-  // check for the WiFi module:
-  if (WiFi.status() == WL_NO_MODULE) {
-    Serial.println("Communication with WiFi module failed!");
-    while (true); // don't continue
+  ///////////////////////////////////// Connect to WiFi:
+  Serial.print("Connecting to ");
+  Serial.println(wifi_ssid);
+  WiFi.begin(wifi_ssid, wifi_password);
+  
+  while (WiFi.status() != WL_CONNECTED) 
+  {
+    // wait while we connect...
+    delay(500);
+    Serial.print(".");
   }
-  // Check for firmware version
-  String fv = WiFi.firmwareVersion();
-  if (fv < "1.0.0") {
-    Serial.println("Please upgrade the firmware");
-  }
+  Serial.println("WiFi connected!");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println("------------------------");
 
-  // attempt to connect to Wifi network:
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print("Attempting to connect to SSID: ");
-    Serial.println(wifi_ssid);
+  // Set up MQTT
+  client.setServer(mqttServer, mqttPort);
+  client.setCallback(OnCALLBACK); // set function to be called when new messages arrive from a subscription
     
-    // Connect to WPA/WPA2 network. SSID and password are set in config.h
-    WiFi.begin(wifi_ssid, wifi_password);
-    /*** Use the line below instead if no password required! ***/
-    // WiFi.begin(wifi_ssid);
-
-    // wait 10 seconds for connection:
-    delay(10000);
-  }
-  Serial.println("WiFi successfully connected");
-  digitalWrite(LED_BUILTIN, LOW); // turn off light once connected
   
   ////////////////////  Set up the OLED
   u8g2.begin(); 
@@ -165,13 +167,12 @@ void setup() {
   u8g2.setFont(u8g2_font_6x10_tf);
 
 
-
   // Attach event checkers to the state machine
   eventManager.addListener(EVENTBUTTON1DOWN, BEACH_HOUSE_SM);
   eventManager.addListener(EVENTBUTTON2DOWN, BEACH_HOUSE_SM);
   eventManager.addListener(EVENTBUTTON3DOWN, BEACH_HOUSE_SM);
   eventManager.addListener(EVENTBUTTON4DOWN, BEACH_HOUSE_SM);
-  eventManager.addListener(EVENTTIMER, BEACH_HOUSE_SM);
+  eventManager.addListener(EVENTCALLBACK, BEACH_HOUSE_SM);
   
     // Initialize state machine
   BEACH_HOUSE_SM(INIT,0);
@@ -183,7 +184,10 @@ void setup() {
 //---------------------------------
 // Put your main code here, to run repeatedly:
 void loop() {
-  
+
+  // Maintain MQTT Connection
+  connectMQTT();
+    
   // Handle any events that are in the queue
   eventManager.processEvent();
 
@@ -195,7 +199,6 @@ void loop() {
   OnBUTTON2DOWN();
   OnBUTTON3DOWN();
   OnBUTTON4DOWN();
-  OnTIMER();
 
 }
 
@@ -267,20 +270,28 @@ void OnBUTTON4DOWN() {
   lastButtonReading = thisButtonReading;
 }
 
-void OnTIMER() {
+void OnCALLBACK(char* path, byte* value, unsigned int value_length){
+  Serial.println("This is being called");
+  char response[value_length+1];
+//  String response = "";
+  for (int i = 0; i < value_length; i++) {
+    response[i] = (char)value[i];
+    //Serial.println(response[i]);
+  }
+  response[value_length] = 0;
   
-  static int startTime = millis();       // Change type as needed
-  int totaLength = millis() - startTime;
-
-  // Check if this event happened (e.g., button is pressed, timer expired, etc.):
-  //      If it did, update eventHappened flag (and parameter, if desired)
-  if (totaLength >= 60000) {
-    startTime = millis();
-    eventManager.queueEvent(EVENTTIMER, 0);
+  //Serial.println(response);
+  String response_new = String(response);
+  
+  if (response_new == "bananabread") {
+    Serial.println("bananabread!");
+    eventManager.queueEvent(EVENTCALLBACK, 1);
+  } 
+  else if (response_new == "friday") {
+    Serial.println("friday!");
+    eventManager.queueEvent(EVENTCALLBACK, 0);
   }
 }
-
-
 
 //---------------------------------
 //           State Machine  
@@ -300,7 +311,18 @@ void BEACH_HOUSE_SM( int event, int param )
     case INIT:
       Serial.println("STATE: Initialization");
       pinMode(BUTTON1PIN, INPUT);
+      
+      // The below lines are also necessary to configure pins 6/7 as serial
+      pinPeripheral(6, PIO_SERCOM_ALT); 
+      pinPeripheral(7, PIO_SERCOM_ALT);
+    
+      ShowSerial.begin(9600); // initialize both serial ports
+      COMSerial.begin(9600);
+      while (!ShowSerial); // wait for serial to connect //while(!ShowSerial&&(millis()<5000)))
+      while (!COMSerial);
 
+      Mp3Player.controller->init(COMSerial); // initialize the MP3 player
+      
       // Set up the LED Strip
       strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
       strip.show();            // Turn OFF all pixels ASAP
@@ -322,6 +344,7 @@ void BEACH_HOUSE_SM( int event, int param )
       
       // Transition to a different state
       nextState = OFF; 
+      Serial.println("Next State: OFF");  
       break;
 
 
@@ -329,33 +352,33 @@ void BEACH_HOUSE_SM( int event, int param )
       Serial.println("STATE: OFF");
       strip.clear();
       u8g2.clearBuffer();
-      
-      if(event == EVENTTIMER){
-        Serial.println("Response being received");
-        String currentValue = GetData();
-        
-        if (currentValue == "bananabread"){
-          LED_ON(0,250,0);
-          Serial.println("bananabread");
-          u8g2.clearBuffer();
-          u8g2.setFont(u8g2_font_VCR_OSD_tf);
-          u8g2.drawStr(20, 16, "banana bread time!");
-          u8g2.setFont(u8g2_font_7x13_tf);
-          u8g2.sendBuffer();
-          nextState = MESSAGE_RECEIVED;
-          } 
+            
+      if (event == EVENTCALLBACK && param == 1){
+        LED_ON(0,250,0);
+        Mp3Player.controller->playSDSong("jeffsound.mp3"); 
+        Serial.println("bananabread");
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_VCR_OSD_tf);
+        u8g2.drawStr(20, 16, "banana bread time!");
+        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.sendBuffer();
+        nextState = MESSAGE_RECEIVED;
+        Serial.println("Next State: MESSAGE_RECEIVED");  
+        } 
 
-        else if (currentValue == "friday"){        
-          LED_ON(250,0,0);
-          Serial.println("friday");
-          u8g2.clearBuffer();
-          u8g2.setFont(u8g2_font_VCR_OSD_tf);
-          u8g2.drawStr(20, 16, "friday!!");
-          u8g2.setFont(u8g2_font_7x13_tf);
-          u8g2.sendBuffer();
-          nextState = MESSAGE_RECEIVED;
-        }   
-      }       
+      else if (event == EVENTCALLBACK && param == 0){        
+        LED_ON(250,0,0);
+        Mp3Player.controller->playSDSong("roysound.mp3"); 
+        Serial.println("friday");
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_VCR_OSD_tf);
+        u8g2.drawStr(20, 16, "friday!!");
+        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.sendBuffer();
+        nextState = MESSAGE_RECEIVED;
+        Serial.println("Next State: MESSAGE_RECEIVED");  
+      }   
+    
       break;
     
     case MESSAGE_RECEIVED:
@@ -364,17 +387,19 @@ void BEACH_HOUSE_SM( int event, int param )
       //RESPONSE CHECKER FUNCTION, STAY IN THIS STATE UNTIL RESPONSE IS IDENTIFIED  
 
       if (event == EVENTBUTTON3DOWN){
-      PostData("accepted");
+      client.publish(feed, "accepted");
       Serial.println("YESSSS");
       LED_ON(250,250,250);
       nextState=OFF;
+      Serial.println("Next State: OFF"); 
       }
       
       if (event == EVENTBUTTON4DOWN){
-      PostData("rejected");
+      client.publish(feed, "rejected");
       Serial.println("No Thanks");
       LED_ON(250,250,250);
-      nextState=OFF;    
+      nextState=OFF;
+      Serial.println("Next State: OFF");    
       }   
       break; 
 
@@ -415,99 +440,38 @@ void LED_OFF()
       }
 }
   
-
-
-String GetData(){
-  // Make sure we're connected to WiFi
-  String output = "";
-  if (WiFi.status() == WL_CONNECTED) {
-
-    // Create a GET request to the advice path
-    GetClient.get(io_response_path); // added codes
-    Serial.println("[HTTP] GET... response Requested");
-
-    // read the status code and body of the response
-    int statusCode = GetClient.responseStatusCode();
-    String response = GetClient.responseBody();
-    
-    // Check for the OK from the Server
-    if(statusCode == 200) {
-        Serial.println("[HTTP] GET received reply!"); 
-        
-        // Parse Server response as JSON document
-        DynamicJsonDocument doc(GetClient.contentLength()); 
-        deserializeJson(doc, response); 
-
-        // Set output to the advice string from the JSON
-        // The JSON looks like:   {"slip" : {"advice": advice_string}, ...}
-        String currentValue = doc["last_value"];
-        output = currentValue;
-        Serial.println(currentValue);       
-        
-    } else if (statusCode > 0) {
-        // Server issue
-        Serial.print("[HTTP] GET... Received response code: "); 
-        Serial.println(statusCode);
-    } else {
-        // Client issue
-        Serial.print("[HTTP] GET... Failed, error code: "); 
-        Serial.println(statusCode);
-    }
-  } else {
-    Serial.println("[WIFI] Not connected");
-  }
+void connectMQTT() {
   
-  Serial.println(output);
-  return output;
-} 
-
-void PostData(String myMessage) {
-  // Make sure we're connected to WiFi
-  if (WiFi.status() == WL_CONNECTED) {
-
-    Serial.println("[POST] Creating request with value: " + myMessage);
-    PostClient.beginRequest();
-    PostClient.post(io_path); // Add in the path for the Adafruit IO feed
+  // If we're not yet connected, reconnect
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
     
+    // Create a random client ID
+    String clientId = "ArduinoClient-";
+    clientId += String(random(0xffff), HEX);
+   
+    // Attempt to connect
+    if (client.connect(clientId.c_str(), mqttUsername, mqttKey)) {
+      // Connection successful
+      Serial.println("successful!");
 
-    // Add message header with access key
-    //    Parameter (String): https://io.adafruit.com/api/docs/#section/Authentication > HeaderKey
-    //    Value (String): the api key
-    PostClient.sendHeader("X-AIO-Key", io_key); // Add in the API key here
-
-    // Add header with the content type of the message 
-    //    Tell the server that the type of content we're sending is JSON
-    PostClient.sendHeader("Content-Type", "application/json"); // fill in the header type to specify JSON data
-
-    // Format myMessage to JSON
-    DynamicJsonDocument doc(300);          // create object with arbitrary size 1000
-    doc["value"] = myMessage;              // set { "value" : myMessage }
-    String formatted_data;
-    serializeJson(doc, formatted_data);    // save JSON-formatted String to formatted_data
-    PostClient.sendHeader("Content-Length", formatted_data.length()); // fill in the header type to send the length of data
-
-    // Post data, along with headers
-    PostClient.beginBody();
-    PostClient.print(formatted_data);
-    PostClient.endRequest();
-
-    // Handle response from Server
-    int statusCode = PostClient.responseStatusCode();
-    String response = PostClient.responseBody();
-    if (statusCode == 200) {
-      // Response indicated OK
-      Serial.println("[HTTP] POST was successful!"); 
-    } else if (statusCode > 0) {
-      // Server response received
-      Serial.print("[HTTP] POST... Received response code: "); 
-      Serial.println(statusCode);
-    } else {
-      // httpCode will be negative on Client error
-      Serial.print("[HTTP] POST... Failed, error: "); 
-      Serial.println(statusCode);
+      // Subscribe to desired topics
+      client.subscribe(feed);
+      /* You can add more topics here as needed */
+      // client.subscribe(subTopic2);
+    } 
+    else {
+      // Connection failed. Try again.
+      Serial.print("failed, state = ");
+      Serial.print(client.state());
+      Serial.println(". Trying again in 5 seconds.");
+      // Wait 5 seconds before retrying
+      delay(5000);
     }
-  } else {
-    Serial.println("[WIFI] Not connected");
   }
+
+  // Process incoming messages and maintain connection to MQTT server
+  client.loop();
+  
 }
   
