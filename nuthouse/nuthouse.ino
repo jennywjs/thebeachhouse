@@ -329,7 +329,7 @@ void BEACH_HOUSE_SM( int event, int param )
       Serial.println("System Ready");
       u8g2.clearBuffer();
       u8g2.setFont(u8g2_font_VCR_OSD_tf);
-      u8g2.drawXBMP(5, 16, house_width, house_height, house_bits);
+      u8g2.drawXBMP(23, 5, house_width, house_height, house_bits);
       u8g2.setFont(u8g2_font_7x13_tf);
       u8g2.sendBuffer();
       
@@ -350,9 +350,8 @@ void BEACH_HOUSE_SM( int event, int param )
   //      PostData("bananabraed");
         LED_ON(250,250,250); // LEDS light on white one by one to indicate message sent. 
         u8g2.clearBuffer();
-        u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "banana bread time!");
-        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.drawStr(8, 15, "banana bread");
+        u8g2.drawStr(8, 33, "time!!");
         u8g2.sendBuffer();
         nextState=WAIT_RESPONSE;
         Serial.println("Next State: WAIT_RESPONSE");
@@ -363,9 +362,8 @@ void BEACH_HOUSE_SM( int event, int param )
 //        PostData("friday");
         LED_ON(250,250,250);
         u8g2.clearBuffer();
-        u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "fryday!");
-        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.setFont(u8g2_font_9x15_tf);   
+        u8g2.drawStr(30, 22, "fryday!");
         u8g2.sendBuffer();
         nextState=WAIT_RESPONSE;    
         Serial.println("Next State: WAIT_RESPONSE");
@@ -383,9 +381,8 @@ void BEACH_HOUSE_SM( int event, int param )
         LED_ON(0,250,0); 
         Serial.println("YESSSS");
         u8g2.clearBuffer();
-        u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "Coming!");                 //LED in nuthouse shows yes
-        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.setFont(u8g2_font_9x15_tf);   
+        u8g2.drawStr(30, 22, "Coming!");               //LED in nuthouse shows yes
         u8g2.sendBuffer();
         nextState = REACT_RESPONSE;
         Serial.println("Next State: REACT_RESPONSE");
@@ -396,9 +393,9 @@ void BEACH_HOUSE_SM( int event, int param )
         LED_ON(250,0,0);  
         Serial.println("No Thanks");
         u8g2.clearBuffer();
-        u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "Maybe next time <3");
-        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.setFont(u8g2_font_9x15_tf);   
+        u8g2.drawStr(10, 15, "maybe next");
+        u8g2.drawStr(10, 33, "time :D");
         u8g2.sendBuffer();
         nextState = REACT_RESPONSE;
         Serial.println("Next State: REACT_RESPONSE");
@@ -420,7 +417,7 @@ void BEACH_HOUSE_SM( int event, int param )
         LED_OFF();
         u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawXBMP(5, 16, house_width, house_height, house_bits);
+        u8g2.drawXBMP(23, 5, house_width, house_height, house_bits);
         u8g2.setFont(u8g2_font_7x13_tf);
         u8g2.sendBuffer();
         nextState = OFF;
@@ -431,7 +428,7 @@ void BEACH_HOUSE_SM( int event, int param )
         LED_OFF();
         u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawXBMP(5, 16, house_width, house_height, house_bits);
+        u8g2.drawXBMP(23, 5, house_width, house_height, house_bits);
         u8g2.setFont(u8g2_font_7x13_tf);
         u8g2.sendBuffer();
         nextState = OFF;

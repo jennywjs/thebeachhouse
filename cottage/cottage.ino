@@ -338,7 +338,7 @@ void BEACH_HOUSE_SM( int event, int param )
       u8g2.clearBuffer();
       u8g2.setFont(u8g2_font_VCR_OSD_tf);
       u8g2.drawXBMP(23, 5, house_width, house_height, house_bits);
-      u8g2.setFont(u8g2_font_7x13_tf);
+      u8g2.setFont(u8g2_font_6x10_tf);
       u8g2.sendBuffer();
       
       // Transition to a different state
@@ -357,9 +357,9 @@ void BEACH_HOUSE_SM( int event, int param )
         Mp3Player.controller->playSDSong("jeffsound.mp3"); 
         Serial.println("bananabread");
         u8g2.clearBuffer();
-        u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(5, 16, "banana bread time!");
-        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.setFont(u8g2_font_9x15_tf);   
+        u8g2.drawStr(8, 15, "banana bread");
+        u8g2.drawStr(8, 33, "time!!");
         u8g2.sendBuffer();
         nextState = MESSAGE_RECEIVED;
         Serial.println("Next State: MESSAGE_RECEIVED");  
@@ -370,9 +370,8 @@ void BEACH_HOUSE_SM( int event, int param )
         Mp3Player.controller->playSDSong("roysound.mp3"); 
         Serial.println("friday");
         u8g2.clearBuffer();
-        u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(10, 16, "fryday!!");
-        u8g2.setFont(u8g2_font_7x13_tf);
+        u8g2.setFont(u8g2_font_9x15_tf);   
+        u8g2.drawStr(30, 22, "fryday!");
         u8g2.sendBuffer();
         nextState = MESSAGE_RECEIVED;
         Serial.println("Next State: MESSAGE_RECEIVED");  
@@ -392,16 +391,16 @@ void BEACH_HOUSE_SM( int event, int param )
       client.publish(feed, "accepted");
       Serial.println("YESSSS");
       u8g2.clearBuffer();
-      u8g2.setFont(u8g2_font_VCR_OSD_tf);
-      u8g2.drawStr(20, 16, "Coming!");
-      u8g2.setFont(u8g2_font_7x13_tf);
+      //u8g2.setFont(u8g2_font_VCR_OSD_tf);
+      u8g2.setFont(u8g2_font_9x15_tf);   
+      u8g2.drawStr(30, 22, "Coming!");
       u8g2.sendBuffer();
       LED_ON(0,250,0);
       LED_OFF(); 
       u8g2.clearBuffer();
       u8g2.setFont(u8g2_font_VCR_OSD_tf);
       u8g2.drawXBMP(23, 5, house_width, house_height, house_bits);
-      u8g2.setFont(u8g2_font_7x13_tf);
+      u8g2.setFont(u8g2_font_6x10_tf);
       u8g2.sendBuffer();
       nextState=OFF;
       Serial.println("Next State: OFF"); 
@@ -411,16 +410,16 @@ void BEACH_HOUSE_SM( int event, int param )
       client.publish(feed, "rejected");
       Serial.println("No Thanks");
       u8g2.clearBuffer();
-      u8g2.setFont(u8g2_font_VCR_OSD_tf);
-      u8g2.drawStr(20, 16, "Maybe next time <3");
-      u8g2.setFont(u8g2_font_7x13_tf);
+//      u8g2.setFont(u8g2_font_VCR_OSD_tf);
+      u8g2.setFont(u8g2_font_9x15_tf);   
+      u8g2.drawStr(10, 15, "maybe next");
+      u8g2.drawStr(10, 33, "time :D");
       u8g2.sendBuffer();
       LED_ON(250,0,0);
       LED_OFF(); 
       u8g2.clearBuffer();
-      u8g2.setFont(u8g2_font_VCR_OSD_tf);
+      u8g2.setFont(u8g2_font_8x13_tf);
       u8g2.drawXBMP(23, 5, house_width, house_height, house_bits);
-      u8g2.setFont(u8g2_font_7x13_tf);
       u8g2.sendBuffer();
       nextState=OFF;
       Serial.println("Next State: OFF");    
