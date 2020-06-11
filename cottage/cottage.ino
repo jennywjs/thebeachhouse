@@ -7,6 +7,7 @@
  */
 #include "config.h"  // wifi credentials & API info go here
 #include "apikey.h"
+#include "icon.h"
 
 #include <U8g2lib.h>
 #include <U8x8lib.h>
@@ -23,8 +24,7 @@
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <WiFiNINA.h>
-#include <ArduinoHttpClient.h>
-#include <TimeLib.h>
+
 #define I2C_ADDRESS 0x18 // should not need to change
 
 #include <WT2003S_Player.h>
@@ -337,7 +337,7 @@ void BEACH_HOUSE_SM( int event, int param )
       Serial.println("System Ready");
       u8g2.clearBuffer();
       u8g2.setFont(u8g2_font_VCR_OSD_tf);
-      u8g2.drawStr(20, 16, "System Ready");
+      u8g2.drawXBMP(23, 5, house_width, house_height, house_bits);
       u8g2.setFont(u8g2_font_7x13_tf);
       u8g2.sendBuffer();
       
@@ -358,7 +358,7 @@ void BEACH_HOUSE_SM( int event, int param )
         Serial.println("bananabread");
         u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "banana bread time!");
+        u8g2.drawStr(5, 16, "banana bread time!");
         u8g2.setFont(u8g2_font_7x13_tf);
         u8g2.sendBuffer();
         nextState = MESSAGE_RECEIVED;
@@ -371,7 +371,7 @@ void BEACH_HOUSE_SM( int event, int param )
         Serial.println("friday");
         u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "friday!!");
+        u8g2.drawStr(10, 16, "fryday!!");
         u8g2.setFont(u8g2_font_7x13_tf);
         u8g2.sendBuffer();
         nextState = MESSAGE_RECEIVED;
@@ -400,7 +400,7 @@ void BEACH_HOUSE_SM( int event, int param )
       LED_OFF(); 
       u8g2.clearBuffer();
       u8g2.setFont(u8g2_font_VCR_OSD_tf);
-      u8g2.drawStr(20, 16, "System Ready");
+      u8g2.drawXBMP(23, 5, house_width, house_height, house_bits);
       u8g2.setFont(u8g2_font_7x13_tf);
       u8g2.sendBuffer();
       nextState=OFF;
@@ -415,11 +415,11 @@ void BEACH_HOUSE_SM( int event, int param )
       u8g2.drawStr(20, 16, "Maybe next time <3");
       u8g2.setFont(u8g2_font_7x13_tf);
       u8g2.sendBuffer();
-      LED_ON(0,250,0);
+      LED_ON(250,0,0);
       LED_OFF(); 
       u8g2.clearBuffer();
       u8g2.setFont(u8g2_font_VCR_OSD_tf);
-      u8g2.drawStr(20, 16, "System Ready");
+      u8g2.drawXBMP(23, 5, house_width, house_height, house_bits);
       u8g2.setFont(u8g2_font_7x13_tf);
       u8g2.sendBuffer();
       nextState=OFF;

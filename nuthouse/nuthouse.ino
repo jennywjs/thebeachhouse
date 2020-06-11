@@ -8,7 +8,7 @@
  */
 #include "config.h"  // wifi credentials & API info go here
 #include "apikey.h"
-
+#include "icon.h"
 #include <U8g2lib.h>
 #include <U8x8lib.h>
 
@@ -24,8 +24,6 @@
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <WiFiNINA.h>
-#include <ArduinoHttpClient.h>
-#include <TimeLib.h>
 #define I2C_ADDRESS 0x18 // should not need to change
 
 #include <WT2003S_Player.h>
@@ -331,7 +329,7 @@ void BEACH_HOUSE_SM( int event, int param )
       Serial.println("System Ready");
       u8g2.clearBuffer();
       u8g2.setFont(u8g2_font_VCR_OSD_tf);
-      u8g2.drawStr(20, 16, "System Ready");
+      u8g2.drawXBMP(5, 16, house_width, house_height, house_bits);
       u8g2.setFont(u8g2_font_7x13_tf);
       u8g2.sendBuffer();
       
@@ -422,7 +420,7 @@ void BEACH_HOUSE_SM( int event, int param )
         LED_OFF();
         u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "System Ready");                 //LED in nuthouse shows yes
+        u8g2.drawXBMP(5, 16, house_width, house_height, house_bits);
         u8g2.setFont(u8g2_font_7x13_tf);
         u8g2.sendBuffer();
         nextState = OFF;
@@ -433,7 +431,7 @@ void BEACH_HOUSE_SM( int event, int param )
         LED_OFF();
         u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_VCR_OSD_tf);
-        u8g2.drawStr(20, 16, "System Ready!");                 //LED in nuthouse shows yes
+        u8g2.drawXBMP(5, 16, house_width, house_height, house_bits);
         u8g2.setFont(u8g2_font_7x13_tf);
         u8g2.sendBuffer();
         nextState = OFF;
